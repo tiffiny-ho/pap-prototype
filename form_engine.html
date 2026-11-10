@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pap Smear / LBC Report System - Smart Engine</title>
+    <!-- 引入强大的纯前端 PDF 生成引擎 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; padding: 20px; margin: 0;}
         .form-container { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); max-width: 850px; margin: auto; }
@@ -58,6 +61,9 @@
         .summary-table td:first-child { font-weight: bold; width: 30%; color: #444; background: #f8f9fa; border-right: 1px solid #eee; }
         
         .alert-banner { background-color: #cce5ff; color: #004085; padding: 15px; border-radius: 6px; margin-bottom: 20px; border: 1px solid #b8daff; font-size: 0.95rem; }
+        
+        /* 专供 PDF 打印渲染的隐藏样式 */
+        #pdf_print_area { display: none; }
     </style>
 </head>
 <body onload="initPage()">
@@ -346,7 +352,7 @@
                 </label>
                 <label class="radio-card" style="margin-bottom:0; padding:12px; border-color: #4CAF50; background: #e8f5e9;">
                     <input type="radio" name="routing_action" value="finalize" style="transform: scale(1.2); margin-right: 8px;"> 
-                    <span style="font-weight: bold; color: #28a745;">Validate & Finalize Report</span>
+                    <span style="font-weight: bold; color: #28a745;">Validate, Finalize & Generate PDF Report</span>
                 </label>
             </div>
         </div>
@@ -355,16 +361,20 @@
             <div class="nav-normal">
                 <button type="button" class="btn btn-secondary" onclick="switchStep(5, 4)">⬅️ Back to Edit</button>
             </div>
-            <button type="button" class="btn" style="float: right; background-color: #007bff; font-size: 1.1rem; padding: 12px 30px;" onclick="submitFinalReport()">✅ Confirm & Submit</button>
+            <button id="btn_submit" type="button" class="btn" style="float: right; background-color: #007bff; font-size: 1.1rem; padding: 12px 30px;" onclick="submitFinalReport()">✅ Confirm & Submit</button>
         </div>
     </div>
 
 </div>
 
+<!-- 这个隐藏的 DIV 专门用来盛放将被转换为 PDF 的 KKM 官方排版内容 -->
+<div id="pdf_print_area"></div>
+
 <script>
     // ==================== 全局状态与引擎初始化 ====================
     var currentUser = "";
     var isReviewMode = false;
+    var fullReportDataHTML = ""; // 用于存放没 Edit 按钮的纯净版数据
     var mockDatabase = { "800101145555": { name: "SITI AMINAH", race: "Malay" }, "750304141234": { name: "WONG MEI LING", race: "Chinese" } };
 
     function getQueryParam(param) {
@@ -378,7 +388,7 @@
     }
 
     function initPage() { 
-        currentUser = localStorage.getItem('lis_current_user') || "TEST USER [PATHOLOGIST]";
+        currentUser = localStorage.getItem('lis_current_user') || "DR. TEST USER [PATHOLOGIST]";
         document.getElementById('screener_name').value = currentUser; 
 
         var action = getQueryParam('action');
@@ -415,7 +425,6 @@
         document.getElementById('cyto_no').value = data.cyto_no;
         document.getElementById('patient_name').value = data.name;
         
-        // 【修复 1】：彻底解锁修改权限，方便 Review 时变更 Demographic 资料
         document.getElementById('patient_name').disabled = false;
         document.getElementById('gender').disabled = false;
         document.getElementById('race').disabled = false;
@@ -445,7 +454,6 @@
     }
 
     function returnToSummary(currentStep) {
-        // 调用我们恢复的深层防呆拦截
         if(!validateStep(currentStep)) return;
         
         document.getElementById('step' + currentStep).classList.add('hidden');
@@ -454,9 +462,8 @@
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    // ==================== 恢复的联动底层函数 ====================
+    // ==================== 原版联动与防呆引擎 ====================
     function formatUppercase(element) { element.value = element.value.toUpperCase(); }
-    
     function handleEnter(e) { if (e.keyCode === 13 || e.key === 'Enter') { e.preventDefault(); checkPatientHistory(); } }
     
     function checkPatientHistory() {
@@ -591,7 +598,6 @@
         toggleGl(); 
     }
 
-    // 【修复 2】：深层防呆逻辑回归。不论是在新建单据的 "Next" 还是复审模式的 "Save & Return"，都会走这里。
     function validateStep(step) {
         if (step === 1) {
             if(!document.getElementById('patient_name').value) { alert("⚠️ Please verify IC and enter Patient Name."); return false; }
@@ -620,11 +626,7 @@
                 var otherMalignant = document.getElementById('other_malignant').value.trim();
                 
                 if (!sqMain && !glMain && otherMalignant === "") { alert("⚠️ For Abnormalities, select at least one condition or enter it in 'Other'."); return false; }
-                
-                // KKM 级深层拦截
-                if (sqMain && sqMain.value === 'atypical' && !document.querySelector('input[name="abn_sq_atypical"]:checked')) { 
-                    alert("⚠️ For Atypical squamous cells, specify ASC-US or ASC-H."); return false; 
-                }
+                if (sqMain && sqMain.value === 'atypical' && !document.querySelector('input[name="abn_sq_atypical"]:checked')) { alert("⚠️ For Atypical squamous cells, specify ASC-US or ASC-H."); return false; }
                 if (glMain) {
                     if (glMain.value === 'atypical_nos' && !document.querySelector('input[name="abn_gl_nos"]:checked')) { alert("⚠️ Specify the Atypical cells (NOS) type."); return false; }
                     if (glMain.value === 'atypical_favour' && !document.querySelector('input[name="abn_gl_favour"]:checked')) { alert("⚠️ Specify the Atypical cells, favour neoplastic type."); return false; }
@@ -643,14 +645,14 @@
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    // 【修复 3】：全景 Summary 生成引擎 (恢复了对所有 Checkbox 阵列的抓取)
+    // ==================== 抓取引擎与 PDF 数据源分离 ====================
     function generateSummary() {
-        // ---- 抓取 Step 1 ----
         var name = document.getElementById('patient_name').value || '-';
         var ic = document.getElementById('ic_no').value || '-';
         var gender = document.getElementById('gender').value || '-';
         var race = document.getElementById('race').value || '-';
         var dob = document.getElementById('dob').value || '-';
+        var cyto = document.getElementById('cyto_no').value || '-';
         
         var sampleTypeEl = document.querySelector('input[name="sample_type"]:checked');
         var sampleTypeText = '-';
@@ -662,7 +664,6 @@
             }
         }
 
-        // ---- 抓取 Step 2 ----
         var adqEl = document.querySelector('input[name="adequacy"]:checked');
         var adequacyText = '-';
         var adequacyDetails = [];
@@ -672,25 +673,16 @@
                 var endo = document.querySelector('input[name="endo_cells"]:checked');
                 if (endo) adequacyDetails.push("• Endocervical cells: " + (endo.value === 'present' ? 'Present' : 'Absent'));
                 var satWith = document.querySelectorAll('input[name="sat_with"]:checked');
-                if (satWith.length > 0) {
-                    var wArr = [];
-                    for(var i=0; i<satWith.length; i++) wArr.push(satWith[i].parentNode.innerText.trim());
-                    adequacyDetails.push("• With: " + wArr.join(", "));
-                }
+                for(var i=0; i<satWith.length; i++) adequacyDetails.push("• With: " + satWith[i].parentNode.innerText.trim());
             } else if (adqEl.value === 'unsatisfactory') {
                 adequacyText = "Unsatisfactory for evaluation";
                 var unsatR = document.querySelectorAll('input[name="unsat_reason"]:checked');
-                if (unsatR.length > 0) {
-                    var rArr = [];
-                    for(var j=0; j<unsatR.length; j++) rArr.push(unsatR[j].parentNode.innerText.trim());
-                    adequacyDetails.push("• Reasons: " + rArr.join(", "));
-                }
+                for(var j=0; j<unsatR.length; j++) adequacyDetails.push("• Reasons: " + unsatR[j].parentNode.innerText.trim());
             }
         }
         var fullAdequacy = '<div style="font-weight:bold; color:' + (adqEl && adqEl.value==='unsatisfactory' ? '#dc3545' : '#28a745') + ';">' + adequacyText + '</div>';
         if (adequacyDetails.length > 0) fullAdequacy += '<div style="font-size:0.85rem; color:#555; margin-top:5px; padding-left:5px; border-left:2px solid #ccc;">' + adequacyDetails.join('<br>') + '</div>';
 
-        // ---- 抓取 Step 3 ----
         var intEl = document.querySelector('input[name="interpretation"]:checked');
         var interpText = '-';
         var interpDetails = [];
@@ -698,17 +690,9 @@
             if (intEl.value === 'nilm') {
                 interpText = "Negative for intraepithelial lesion malignancy (NILM)";
                 var orgs = document.querySelectorAll('input[name="nilm_org"]:checked');
-                if(orgs.length > 0) {
-                    var oArr = [];
-                    for(var k=0; k<orgs.length; k++) oArr.push(orgs[k].parentNode.innerText.trim());
-                    interpDetails.push("• Organisms: " + oArr.join(", "));
-                }
+                for(var k=0; k<orgs.length; k++) interpDetails.push("• Organisms: " + orgs[k].parentNode.innerText.trim());
                 var ben = document.querySelectorAll('input[name="nilm_benign"]:checked');
-                if(ben.length > 0) {
-                    var bArr = [];
-                    for(var m=0; m<ben.length; m++) bArr.push(ben[m].parentNode.innerText.trim());
-                    interpDetails.push("• Benign changes: " + bArr.join(", "));
-                }
+                for(var m=0; m<ben.length; m++) interpDetails.push("• Benign changes: " + ben[m].parentNode.innerText.trim());
             } else if (intEl.value === 'abnormal') {
                 interpText = "Epithelial cells abnormalities";
                 var sqMain = document.querySelector('input[name="abn_sq_main"]:checked');
@@ -745,7 +729,6 @@
         var fullInterp = '<div style="font-weight:bold; color:' + (intEl && intEl.value==='abnormal' ? '#dc3545' : '#28a745') + ';">' + interpText + '</div>';
         if (interpDetails.length > 0) fullInterp += '<div style="font-size:0.85rem; color:#555; margin-top:5px; padding-left:5px; border-left:2px solid #ccc;">' + interpDetails.join('<br>') + '</div>';
 
-        // ---- 抓取 Step 4 ----
         var comments = document.getElementById('comments').value.trim() || 'None';
         var checkedSuggEls = document.querySelectorAll('input[name="suggestion"]:checked');
         var checkedSuggestions = [];
@@ -754,13 +737,13 @@
         if(otherSugg) checkedSuggestions.push("• Other: " + otherSugg);
         var suggestionsText = checkedSuggestions.length > 0 ? checkedSuggestions.join('<br>') : 'None';
 
-        // ---- 拼装 HTML 表格 ----
+        // 1. 生成带有 UI Edit 按钮的网页端 Table
         var html = '<table class="summary-table">';
-        
         var btnEdit1 = isReviewMode ? '<button class="btn-edit" style="float:right;" onclick="editStep(1)">✏️ Edit</button>' : '';
         html += '<tr style="background:#f8f9fa;"><td colspan="2" style="color:#007bff; font-size:1.05rem;">1. Patient & Sample Profile ' + btnEdit1 + '</td></tr>';
         html += '<tr><td>Patient Name & IC:</td><td><strong>' + name + '</strong> <br><span class="text-muted">' + ic + '</span></td></tr>';
         html += '<tr><td>Demographics:</td><td>Gender: ' + gender + ' &nbsp;|&nbsp; Race: ' + race + ' &nbsp;|&nbsp; DOB: ' + dob + '</td></tr>';
+        html += '<tr><td>Cytology No:</td><td>' + cyto + '</td></tr>';
         html += '<tr><td>Sample Type:</td><td>' + sampleTypeText + '</td></tr>';
         
         var btnEdit2 = isReviewMode ? '<button class="btn-edit" style="float:right;" onclick="editStep(2)">✏️ Edit</button>' : '';
@@ -775,27 +758,107 @@
         html += '<tr style="background:#f8f9fa;"><td colspan="2" style="color:#6c757d; font-size:1.05rem; border-top:1px solid #ccc;">4. Suggestions & Comments ' + btnEdit4 + '</td></tr>';
         html += '<tr><td>Comments:</td><td>' + comments.replace(/\n/g, '<br>') + '</td></tr>';
         html += '<tr><td>Suggestions:</td><td>' + suggestionsText + '</td></tr>';
-        
         html += '</table>';
+        
         document.getElementById('summary_content').innerHTML = html;
+
+        // 2. 生成纯净版 (无 Edit 按钮) 专供 PDF 打印使用的数据，这与 KKM 表格完美映射
+        fullReportDataHTML = '<table style="width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 20px;">';
+        fullReportDataHTML += '<tr style="background:#f0f0f0;"><td colspan="2" style="padding:8px; border:1px solid #ddd; font-weight:bold;">PATIENT & SAMPLE INFORMATION</td></tr>';
+        fullReportDataHTML += '<tr><td style="padding:8px; border:1px solid #ddd; width:30%;">Name & IC No:</td><td style="padding:8px; border:1px solid #ddd;"><strong>' + name + '</strong> (' + ic + ')</td></tr>';
+        fullReportDataHTML += '<tr><td style="padding:8px; border:1px solid #ddd;">Cytology No:</td><td style="padding:8px; border:1px solid #ddd;">' + cyto + '</td></tr>';
+        fullReportDataHTML += '<tr><td style="padding:8px; border:1px solid #ddd;">Sample Type (A):</td><td style="padding:8px; border:1px solid #ddd;">' + sampleTypeText + '</td></tr>';
+        fullReportDataHTML += '<tr style="background:#f0f0f0;"><td colspan="2" style="padding:8px; border:1px solid #ddd; font-weight:bold;">CLINICAL FINDINGS & INTERPRETATION</td></tr>';
+        fullReportDataHTML += '<tr><td style="padding:8px; border:1px solid #ddd;">Sample Adequacy (B):</td><td style="padding:8px; border:1px solid #ddd;">' + fullAdequacy + '</td></tr>';
+        fullReportDataHTML += '<tr><td style="padding:8px; border:1px solid #ddd;">Result (C):</td><td style="padding:8px; border:1px solid #ddd;">' + fullInterp + '</td></tr>';
+        fullReportDataHTML += '<tr style="background:#f0f0f0;"><td colspan="2" style="padding:8px; border:1px solid #ddd; font-weight:bold;">SUGGESTIONS</td></tr>';
+        fullReportDataHTML += '<tr><td style="padding:8px; border:1px solid #ddd;">Comments (D):</td><td style="padding:8px; border:1px solid #ddd;">' + comments.replace(/\n/g, '<br>') + '</td></tr>';
+        fullReportDataHTML += '<tr><td style="padding:8px; border:1px solid #ddd;">Suggestion (E):</td><td style="padding:8px; border:1px solid #ddd;">' + suggestionsText + '</td></tr>';
+        fullReportDataHTML += '</table>';
     }
 
+    // ==================== 最终提交与生成官方 PDF 报告引擎 ====================
     function submitFinalReport() {
         var routingEl = document.querySelector('input[name="routing_action"]:checked');
         if (!routingEl) { alert("⚠️ LAB USE ONLY: Please select Next Action or Validate before submission."); return; }
         
         var routingVal = routingEl.value;
         var patientName = document.getElementById('patient_name').value;
+        var cytoNo = document.getElementById('cyto_no').value || "UNKNOWN";
 
-        if (routingVal === 'route_2nd') {
-            alert("ℹ️ SUBMITTED. Routed to 2nd Screener queue.");
-        } else if (routingVal === 'route_patho') {
-            alert("ℹ️ SUBMITTED. Routed to Pathologist queue.");
-        } else if (routingVal === 'finalize') {
-            alert("✅ SUCCESS! Report for " + patientName + " has been Validated & Finalized.");
+        // 如果用户选择了 Finalize (签发)，则触发 PDF 生成逻辑
+        if (routingVal === 'finalize') {
+            document.getElementById('btn_submit').innerText = "Generating PDF...";
+            document.getElementById('btn_submit').disabled = true;
+            generateOfficialPDF(cytoNo, patientName);
+        } else {
+            // 普通流转给别人
+            alert("ℹ️ SUBMITTED. Report has been routed successfully.");
+            window.location.href = 'dashboard.html';
         }
-        
-        window.location.href = 'dashboard.html';
+    }
+
+    // 利用 html2pdf 核心库，构建 1:1 映射 KKM Form 88 的打印版面
+    function generateOfficialPDF(cytoNo, patientName) {
+        var screener = document.getElementById('screener_name').value;
+        var today = new Date().toLocaleDateString('en-GB');
+
+        // 构建纯打印专用的 HTML 结构 (对齐 KKM Form 88)
+        var printContent = `
+            <div style="padding: 40px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #333;">
+                
+                <!-- KKM Form 88 官方表头 -->
+                <div style="text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 10px;">
+                    <h2 style="margin: 0; font-size: 18px; text-transform: uppercase;">Kementerian Kesihatan Malaysia</h2>
+                    <h3 style="margin: 5px 0; font-size: 16px;">Perkhidmatan Patologi</h3>
+                    <h3 style="margin: 10px 0 0 0; font-size: 15px; text-decoration: underline;">CYTOLOGY (PAP SMEAR/LBC) REPORT</h3>
+                </div>
+
+                <!-- 注入我们在 generateSummary 里生成好的纯净版 Data Table -->
+                ${fullReportDataHTML}
+
+                <!-- KKM Form 88 底部的 LAB USE ONLY 签字区 -->
+                <div style="border: 2px solid #333; padding: 15px; margin-top: 30px; background-color: #fafafa;">
+                    <h4 style="margin: 0 0 15px 0; border-bottom: 1px solid #ccc; padding-bottom: 5px;">LAB USE ONLY - VALIDATION</h4>
+                    <table style="width: 100%; font-size: 13px;">
+                        <tr>
+                            <td style="width: 50%; padding-bottom: 15px;"><strong>Validated by:</strong><br><br><span style="font-family: 'Courier New', Courier, monospace; font-size: 16px;"><i>Digitally Signed</i></span></td>
+                            <td style="width: 50%; padding-bottom: 15px;"><strong>Date Printing:</strong><br><br>${today}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding-bottom: 15px;"><strong>Designation/Stamp:</strong><br><br><span style="color:#007bff; font-weight:bold;">${screener}</span></td>
+                            <td style="padding-bottom: 15px;"><strong>Action Taken:</strong><br><br>Finalized & Verified</td>
+                        </tr>
+                    </table>
+                </div>
+                
+                <div style="text-align: center; margin-top: 40px; font-size: 10px; color: #999;">
+                    This is a computer-generated report. No physical signature is required. <br>
+                    Ref: KKM Form 88.H429 B Compliant
+                </div>
+            </div>
+        `;
+
+        // 注入到隐藏区域
+        var printArea = document.getElementById('pdf_print_area');
+        printArea.innerHTML = printContent;
+        printArea.style.display = 'block'; // 临时显示供渲染
+
+        // 配置 html2pdf 参数
+        var opt = {
+            margin:       0.5,
+            filename:     'Cytology_Report_' + cytoNo + '.pdf',
+            image:        { type: 'jpeg', quality: 0.98 },
+            html2canvas:  { scale: 2 },
+            jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' }
+        };
+
+        // 执行生成并下载
+        html2pdf().set(opt).from(printArea).save().then(function() {
+            printArea.style.display = 'none'; // 渲染完立刻隐藏
+            alert("✅ SUCCESS! PDF Report for " + patientName + " has been successfully generated and downloaded.");
+            window.location.href = 'dashboard.html';
+        });
     }
 </script>
 
