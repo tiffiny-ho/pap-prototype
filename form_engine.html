@@ -47,8 +47,7 @@
         .check-item { display: flex; align-items: flex-start; gap: 8px; font-size: 0.9rem; line-height: 1.3; }
         .check-item input { margin-top: 3px; transform: scale(1.1); }
         .check-item input:disabled { cursor: not-allowed; opacity: 0.5; }
-        .check-item input:disabled + span, .check-item:has(input:disabled) { color: #999; }
-
+        
         .btn-clear { float: right; background: none; border: 1px solid #ccc; color: #666; padding: 4px 10px; font-size: 0.8rem; border-radius: 4px; cursor: pointer; transition: 0.2s; font-weight: bold;}
         .btn-clear:hover { background: #e2e6ea; color: #333; }
         .btn-edit { background-color: #fff; border: 1px solid #007bff; color: #007bff; padding: 4px 12px; border-radius: 4px; font-size: 0.85rem; cursor: pointer; font-weight: bold;}
@@ -60,27 +59,29 @@
         
         .alert-banner { background-color: #cce5ff; color: #004085; padding: 15px; border-radius: 6px; margin-bottom: 20px; border: 1px solid #b8daff; font-size: 0.95rem; }
 
-        /* 全屏遮罩层：生成 PDF 时给用户的等待提示 */
         #pdf_loading_overlay {
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(255,255,255,0.95); z-index: 9999; text-align: center; padding-top: 20vh;
         }
         
-        /* 真实的 PDF 渲染区，平时完全不展示 (display:none)。只有生成时才变成 block */
+        /* 采纳 ChatGPT 的建议：物理 A4 尺寸设定，防止过度缩小 */
         #pdf_print_area {
             display: none;
-            width: 800px;
+            width: 190mm;
+            box-sizing: border-box;
             background: white;
             margin: 0 auto;
         }
-        
-        /* 告诉 html2pdf 引擎，遇到这里不要拦腰切断 (避免内容截断) */
-        .avoid-break { page-break-inside: avoid; }
+
+        /* 采纳 ChatGPT 的建议：保持段落完整，移除 avoid-all */
+        .avoid-break {
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
     </style>
 </head>
 <body onload="initPage()">
 
-<!-- 加载遮罩 -->
 <div id="pdf_loading_overlay">
     <h1 style="color: #007bff;">⏳ Generating Official Report...</h1>
     <p>Please wait while the PDF is being securely generated.</p>
@@ -88,7 +89,7 @@
 
 <div class="form-container" id="main_form_container">
     
-    <!-- ==================== STEP 1 ==================== -->
+    <!-- STEP 1 -->
     <div id="step1" class="wizard-step hidden">
         <h2>Step 1: Patient Profile & Sample <span class="step-indicator">1 / 5</span></h2>
         
@@ -145,7 +146,7 @@
         </div>
     </div>
     
-    <!-- ==================== STEP 2 ==================== -->
+    <!-- STEP 2 -->
     <div id="step2" class="wizard-step hidden">
         <h2>Step 2: Sample Adequacy <span class="step-indicator">2 / 5</span></h2>
         
@@ -197,12 +198,11 @@
         </div>
     </div>
 
-    <!-- ==================== STEP 3 ==================== -->
+    <!-- STEP 3 -->
     <div id="step3" class="wizard-step hidden">
         <h2>Step 3: Interpretation / Result <span class="step-indicator">3 / 5</span></h2>
         
         <div class="section-title">C) Interpretation / Result <span style="color:red">*</span></div>
-        <p style="font-size: 0.9rem; color: #666; margin-bottom: 15px;">Please determine the final cytology result. Branches are mutually exclusive.</p>
 
         <label class="radio-card" id="card_nilm" onclick="selectInterpretation('nilm')">
             <input type="radio" name="interpretation" value="nilm" style="transform: scale(1.2); margin-right: 10px;">
@@ -303,7 +303,7 @@
         </div>
     </div>
 
-    <!-- ==================== STEP 4 ==================== -->
+    <!-- STEP 4 -->
     <div id="step4" class="wizard-step hidden">
         <h2>Step 4: Suggestions & Comments <span class="step-indicator">4 / 5</span></h2>
         
@@ -336,7 +336,7 @@
         </div>
     </div>
 
-    <!-- ==================== STEP 5: REVIEW & VALIDATE ==================== -->
+    <!-- STEP 5 -->
     <div id="step5" class="wizard-step hidden">
         <h2>Report Summary & Validation <span class="step-indicator">5 / 5</span></h2>
         
@@ -345,10 +345,8 @@
         </div>
 
         <div id="summary_content" style="background: white; border: 1px solid #ccc; border-radius: 6px; padding: 10px; margin-bottom: 20px;">
-            <!-- 表格将通过 JS 动态生成 -->
         </div>
 
-        <!-- LAB USE ONLY / Validation Section -->
         <div class="section-title" style="border-left-color: #ff9800; display: block;">
             LAB USE ONLY: Validation & Routing
         </div>
@@ -383,9 +381,9 @@
         </div>
     </div>
 
-</div> <!-- main_form_container 结束 -->
+</div> 
 
-<!-- 真正的打印渲染区：平时隐藏，生成时临时显示！ -->
+<!-- 真正的打印渲染区 -->
 <div id="pdf_print_area"></div>
 
 <script>
@@ -477,7 +475,6 @@
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    // 联动表单逻辑
     function formatUppercase(element) { element.value = element.value.toUpperCase(); }
     function handleEnter(e) { if (e.keyCode === 13 || e.key === 'Enter') { e.preventDefault(); checkPatientHistory(); } }
     
@@ -674,41 +671,95 @@
         var race = document.getElementById('race').value || '-';
         var dob = document.getElementById('dob').value || '-';
         var cyto = document.getElementById('cyto_no').value || '-';
-        
-        // 关键修复 1：提取遗漏的 Location 字段
         var loc = document.getElementById('location').value || '-'; 
-        
         var age = calculateAge(dob);
         var collDate = document.getElementById('collected_date').value || '-';
         var recDate = document.getElementById('received_date').value || '-';
         
         var sampleTypeEl = document.querySelector('input[name="sample_type"]:checked');
         var sampleTypeText = '-';
-        var isThinPrep = false;
         if (sampleTypeEl) {
             if (sampleTypeEl.value === 'conventional') sampleTypeText = 'Conventional Pap Smear';
             else if (sampleTypeEl.value === 'lbc') {
                 sampleTypeText = 'Liquid-based preparation';
                 var lbcType = document.querySelector('input[name="lbc_type"]:checked');
-                if (lbcType && lbcType.value === 'ThinPrep') isThinPrep = true;
+                if (lbcType) sampleTypeText += '<br><div style="margin-top:5px; margin-left:20px;">* <b>Ai) Type of LBC:</b> <span style="font-size:14px; margin-right:5px;">☒</span> ' + lbcType.value + '</div>';
             }
         }
 
         var adqEl = document.querySelector('input[name="adequacy"]:checked');
-        var isSatisfactory = adqEl && adqEl.value === 'satisfactory';
-        var endoEl = document.querySelector('input[name="endo_cells"]:checked');
-        var isEndoPresent = endoEl && endoEl.value === 'present';
-        var adequacyText = isSatisfactory ? "Satisfactory for evaluation" : "Unsatisfactory for evaluation";
+        var adequacyText = '-';
+        var adequacyDetails = [];
+        if (adqEl) {
+            if (adqEl.value === 'satisfactory') {
+                adequacyText = "i) Satisfactory for evaluation";
+                var endo = document.querySelector('input[name="endo_cells"]:checked');
+                if (endo) adequacyDetails.push("Endocervical cells / transformation zone cells: <span style='font-size:14px; margin-right:5px;'>☒</span> " + (endo.value === 'present' ? 'Present' : 'Absent'));
+                var satWith = document.querySelectorAll('input[name="sat_with"]:checked');
+                for(var i=0; i<satWith.length; i++) adequacyDetails.push("With: " + satWith[i].parentNode.innerText.trim());
+            } else if (adqEl.value === 'unsatisfactory') {
+                adequacyText = "ii) Unsatisfactory for evaluation";
+                var unsatR = document.querySelectorAll('input[name="unsat_reason"]:checked');
+                for(var j=0; j<unsatR.length; j++) adequacyDetails.push("Reasons: " + unsatR[j].parentNode.innerText.trim());
+            }
+        }
+        var pdfAdequacyHTML = '<strong>' + adequacyText + '</strong>';
+        if (adequacyDetails.length > 0) pdfAdequacyHTML += '<br><div style="margin-top:5px; margin-left:20px;">* ' + adequacyDetails.join('<br>* ') + '</div>';
 
         var intEl = document.querySelector('input[name="interpretation"]:checked');
-        var isAbnormal = intEl && intEl.value === 'abnormal';
-        var sqMain = document.querySelector('input[name="abn_sq_main"]:checked');
-        var isHsil = sqMain && sqMain.value === 'hsil';
+        var interpText = '-';
+        var interpDetails = [];
+        if (intEl) {
+            if (intEl.value === 'nilm') {
+                interpText = "i) Negative for intraepithelial lesion malignancy (NILM)";
+                var orgs = document.querySelectorAll('input[name="nilm_org"]:checked');
+                for(var k=0; k<orgs.length; k++) interpDetails.push("Organism present: <span style='font-size:14px; margin-right:5px;'>☒</span> " + orgs[k].parentNode.innerText.trim());
+                var ben = document.querySelectorAll('input[name="nilm_benign"]:checked');
+                for(var m=0; m<ben.length; m++) interpDetails.push("Other non-neoplastic findings: <span style='font-size:14px; margin-right:5px;'>☒</span> " + ben[m].parentNode.innerText.trim());
+            } else if (intEl.value === 'abnormal') {
+                interpText = "ii) Epithelial cells abnormalities";
+                var sqMain = document.querySelector('input[name="abn_sq_main"]:checked');
+                if (sqMain) {
+                    var sqT = sqMain.parentNode.innerText.trim();
+                    if (sqMain.value === 'atypical') {
+                        var sqAty = document.querySelector('input[name="abn_sq_atypical"]:checked');
+                        if (sqAty) sqT += "<br><div style='margin-top:5px; margin-left:20px;'><span style='font-size:14px; margin-right:5px;'>☒</span> " + sqAty.parentNode.innerText.trim() + "</div>";
+                    } else if (sqMain.value === 'hsil') {
+                        var sqHs = document.querySelector('input[name="abn_sq_hsil_invasion"]:checked');
+                        if (sqHs) sqT += "<br><div style='margin-top:5px; margin-left:20px;'><span style='font-size:14px; margin-right:5px;'>☒</span> " + sqHs.parentNode.innerText.trim() + "</div>";
+                    }
+                    interpDetails.push("a) Squamous cell:<br><div style='margin-top:5px; margin-left:20px;'><span style='font-size:14px; margin-right:5px;'>☒</span> " + sqT + "</div>");
+                }
+                var glMain = document.querySelector('input[name="abn_gl_main"]:checked');
+                if (glMain) {
+                    var glT = glMain.parentNode.innerText.trim();
+                    if (glMain.value === 'atypical_nos') {
+                        var glNos = document.querySelector('input[name="abn_gl_nos"]:checked');
+                        if (glNos) glT += "<br><div style='margin-top:5px; margin-left:20px;'><span style='font-size:14px; margin-right:5px;'>☒</span> " + glNos.parentNode.innerText.trim() + "</div>";
+                    } else if (glMain.value === 'atypical_favour') {
+                        var glFav = document.querySelector('input[name="abn_gl_favour"]:checked');
+                        if (glFav) glT += "<br><div style='margin-top:5px; margin-left:20px;'><span style='font-size:14px; margin-right:5px;'>☒</span> " + glFav.parentNode.innerText.trim() + "</div>";
+                    } else if (glMain.value === 'adeno') {
+                        var glAde = document.querySelector('input[name="abn_gl_adeno"]:checked');
+                        if (glAde) glT += "<br><div style='margin-top:5px; margin-left:20px;'><span style='font-size:14px; margin-right:5px;'>☒</span> " + glAde.parentNode.innerText.trim() + "</div>";
+                    }
+                    interpDetails.push("b) Glandular cells:<br><div style='margin-top:5px; margin-left:20px;'><span style='font-size:14px; margin-right:5px;'>☒</span> " + glT + "</div>");
+                }
+                var othMal = document.getElementById('other_malignant').value.trim();
+                if (othMal) interpDetails.push("c) Other malignant neoplasm:<br><div style='margin-top:5px; margin-left:20px;'><span style='font-size:14px; margin-right:5px;'>☒</span> " + othMal + "</div>");
+            }
+        }
+        var pdfInterpHTML = '<strong>' + interpText + '</strong>';
+        if (interpDetails.length > 0) pdfInterpHTML += '<br><div style="margin-top:5px; margin-left:20px;">* ' + interpDetails.join('</div><div style="margin-top:5px; margin-left:20px;">* ') + '</div>';
 
         var comments = document.getElementById('comments').value.trim();
-        var suggEls = document.querySelectorAll('input[name="suggestion"]:checked');
-        var isRepeat36 = false;
-        for(var s=0; s<suggEls.length; s++) { if(suggEls[s].value === 'repeat_3_6m') isRepeat36 = true; }
+        
+        var checkedSuggEls = document.querySelectorAll('input[name="suggestion"]:checked');
+        var checkedSuggestions = [];
+        for (var n = 0; n < checkedSuggEls.length; n++) checkedSuggestions.push(checkedSuggEls[n].nextElementSibling.innerText.trim());
+        var otherSugg = document.getElementById('other_suggestion').value.trim();
+        if(otherSugg) checkedSuggestions.push("Other: " + otherSugg);
+        var pdfSuggText = checkedSuggestions.length > 0 ? '<span style="font-size:14px; margin-right:5px;">☒</span> ' + checkedSuggestions.join('<br><span style="font-size:14px; margin-right:5px;">☒</span> ') : '-';
 
         // ============ 网页版 Summary 渲染 ============
         var html = '<table class="summary-table">';
@@ -716,20 +767,16 @@
         html += '<tr style="background:#f8f9fa;"><td colspan="2" style="color:#007bff; font-size:1.05rem;">1. Patient & Sample Profile ' + btnEdit1 + '</td></tr>';
         html += '<tr><td>Patient Name & IC:</td><td><strong>' + name + '</strong> <br><span class="text-muted">' + ic + '</span></td></tr>';
         html += '<tr><td>Demographics:</td><td>Gender: ' + gender + ' &nbsp;|&nbsp; Race: ' + race + ' &nbsp;|&nbsp; DOB: ' + dob + '</td></tr>';
-        
-        // 【关键修复 1】：将 Location 展示在网页端 Summary 中
         html += '<tr><td>Location / Clinic:</td><td><strong>' + loc + '</strong></td></tr>';
-        
         html += '<tr><td>Dates:</td><td>Collected: ' + collDate + ' &nbsp;|&nbsp; Received: ' + recDate + '</td></tr>';
-        html += '<tr><td>Sample Type:</td><td>' + sampleTypeText + '</td></tr>';
         
         var btnEdit2 = isReviewMode ? '<button class="btn-edit" style="float:right;" onclick="editStep(2)">✏️ Edit</button>' : '';
         html += '<tr style="background:#f8f9fa;"><td colspan="2" style="color:#28a745; font-size:1.05rem; border-top:1px solid #ccc;">2. Sample Adequacy ' + btnEdit2 + '</td></tr>';
-        html += '<tr><td>Adequacy:</td><td>' + adequacyText + '</td></tr>';
+        html += '<tr><td>Adequacy:</td><td>' + pdfAdequacyHTML + '</td></tr>';
 
         var btnEdit3 = isReviewMode ? '<button class="btn-edit" style="float:right;" onclick="editStep(3)">✏️ Edit</button>' : '';
         html += '<tr style="background:#f8f9fa;"><td colspan="2" style="color:#dc3545; font-size:1.05rem; border-top:1px solid #ccc;">3. Interpretation / Result ' + btnEdit3 + '</td></tr>';
-        html += '<tr><td>Result:</td><td>' + (isAbnormal ? 'Epithelial cells abnormalities' : 'NILM') + '</td></tr>';
+        html += '<tr><td>Result:</td><td>' + pdfInterpHTML + '</td></tr>';
 
         var btnEdit4 = isReviewMode ? '<button class="btn-edit" style="float:right;" onclick="editStep(4)">✏️ Edit</button>' : '';
         html += '<tr style="background:#f8f9fa;"><td colspan="2" style="color:#6c757d; font-size:1.05rem; border-top:1px solid #ccc;">4. Suggestions & Comments ' + btnEdit4 + '</td></tr>';
@@ -737,13 +784,11 @@
         html += '</table>';
         document.getElementById('summary_content').innerHTML = html;
 
-        // 全局变量注入给 PDF 渲染引擎使用，加入 loc
+        // 全局变量注入给 PDF 渲染引擎使用，加入所有最新抓取逻辑
         window.pdfData = {
             name: name, ic: ic, dob: dob, age: age, gender: gender, cyto: cyto, loc: loc, collDate: collDate, recDate: recDate,
-            sampleTypeText: sampleTypeText, isThinPrep: isThinPrep, 
-            isSatisfactory: isSatisfactory, isEndoPresent: isEndoPresent, 
-            isAbnormal: isAbnormal, isHsil: isHsil, 
-            comments: comments, isRepeat36: isRepeat36
+            sampleTypeText: sampleTypeText, pdfAdequacyHTML: pdfAdequacyHTML, pdfInterpHTML: pdfInterpHTML, 
+            comments: comments, pdfSuggText: pdfSuggText
         };
     }
 
@@ -766,29 +811,23 @@
 
     // ==================== 终极 PDF 防截断渲染引擎 ====================
     function generateOfficialPDF(cytoNo, patientName) {
-        // 打开全屏“Generating”遮罩层，防止用户乱点
         document.getElementById('pdf_loading_overlay').style.display = 'block';
-        
         var screener = document.getElementById('screener_name').value;
         var today = new Date().toLocaleDateString('en-GB');
         var d = window.pdfData; 
 
-        function chk(condition) { return condition ? '☒' : '☐'; }
-
         var printContent = `
-            <div style="padding: 20px 40px; font-family: 'Helvetica', Arial, sans-serif; color: #000; line-height: 1.5; background: white;">
+            <div style="width: 190mm; box-sizing: border-box; padding: 10mm; font-family: 'Helvetica', Arial, sans-serif; color: #000; line-height: 1.5; background: white; margin: 0 auto;">
                 
-                <!-- 顶部 KKM Logo 居中抬头 -->
                 <div class="avoid-break" style="text-align: center; margin-bottom: 25px;">
                     <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Emblem_of_the_Ministry_of_Health_%28Malaysia%29.svg/100px-Emblem_of_the_Ministry_of_Health_%28Malaysia%29.svg.png" alt="KKM Logo" style="height: 70px; margin-bottom: 10px;">
-                    <h3 style="margin: 0; font-size: 15px;">KEMENTERIAN KESIHATAN MALAYSIA</h3>
-                    <p style="margin: 10px 0 0 0; font-size: 14px; font-weight: bold;">HOSPITAL SIBU</p>
+                    <h3 style="margin: 0; font-size: 16px;">KEMENTERIAN KESIHATAN MALAYSIA</h3>
+                    <p style="margin: 5px 0 0 0; font-size: 14px; font-weight: bold;">HOSPITAL SIBU</p>
                     <p style="margin: 2px 0; font-size: 12px;">Jalan Ulu Oya, 96000 Sibu, Sarawak, Malaysia</p>
                     <p style="margin: 2px 0 15px 0; font-size: 12px;">Tel: 084-343 333</p>
                     <h2 style="margin: 0; font-size: 18px; text-decoration: underline; padding-bottom: 5px;">CYTOLOGY REPORT</h2>
                 </div>
 
-                <!-- PATIENT & SAMPLE INFORMATION -->
                 <div class="avoid-break" style="margin-bottom: 20px;">
                     <h4 style="background-color: #f5f5f5; padding: 6px; margin: 0 0 10px 0; border: 1px solid #ddd; font-size: 13px;">PATIENT & SAMPLE INFORMATION</h4>
                     <table style="width: 100%; font-size: 12px; border-collapse: collapse;">
@@ -798,7 +837,6 @@
                         <tr><td style="padding:4px 0;"><strong>IC No:</strong></td><td style="padding:4px 0;">${d.ic}</td>
                             <td style="padding:4px 0;"><strong>Cytology No:</strong></td><td style="padding:4px 0;">${d.cyto}</td></tr>
                             
-                        <!-- 【关键修复 1】：将 Location 放进 PDF -->
                         <tr><td style="padding:4px 0;"><strong>DOB:</strong></td><td style="padding:4px 0;">${d.dob} (Age: ${d.age})</td>
                             <td style="padding:4px 0;"><strong>Location:</strong></td><td style="padding:4px 0;">${d.loc}</td></tr>
                             
@@ -807,52 +845,41 @@
                     </table>
                 </div>
 
-                <!-- A) Type of sample -->
                 <div class="avoid-break" style="margin-bottom: 15px; font-size: 12px;">
                     <h4 style="margin: 0 0 5px 0; font-size: 13px;">A) Type of sample:</h4>
                     <div style="margin-left: 20px;">
-                        <span style="font-size:14px; margin-right:5px;">${chk(d.sampleTypeText === 'Liquid-based preparation')}</span> Liquid-based preparation <br>
-                        <div style="margin-left: 20px; margin-top: 5px;">* <strong>Ai) Type of LBC:</strong> <span style="font-size:14px; margin-left:5px; margin-right:5px;">${chk(d.isThinPrep)}</span> ThinPrep</div>
+                        <span style="font-size:14px; margin-right:5px;">☒</span> ${d.sampleTypeText}
                     </div>
                 </div>
 
-                <!-- B) Sample Adequacy -->
                 <div class="avoid-break" style="margin-bottom: 15px; font-size: 12px;">
                     <h4 style="margin: 0 0 5px 0; font-size: 13px;">B) Sample Adequacy:</h4>
                     <div style="margin-left: 20px;">
-                        <span style="font-size:14px; margin-right:5px;">${chk(d.isSatisfactory)}</span> <strong>i) Satisfactory for evaluation</strong> <br>
-                        <div style="margin-left: 20px; margin-top: 5px;">* <strong>Endocervical cells / transformation zone cells:</strong> <span style="font-size:14px; margin-left:5px; margin-right:5px;">${chk(d.isEndoPresent)}</span> Present</div>
+                        <span style="font-size:14px; margin-right:5px;">☒</span> ${d.pdfAdequacyHTML}
                     </div>
                 </div>
 
-                <!-- C) Interpretation / Result -->
                 <div class="avoid-break" style="margin-bottom: 15px; font-size: 12px;">
                     <h4 style="margin: 0 0 5px 0; font-size: 13px;">C) Interpretation / Result:</h4>
-                    <div style="margin-left: 20px;">
-                        <span style="font-size:14px; margin-right:5px;">${chk(d.isAbnormal)}</span> <strong>ii) Epithelial cells abnormalities</strong> <br>
-                        <div style="margin-left: 20px; margin-top: 5px;">* <strong>a) Squamous cell:</strong><br>
-                            <span style="font-size:14px; margin-left:15px; margin-right:5px;">${chk(d.isHsil)}</span> High grade squamous intraepithelial lesion (HSIL)
-                        </div>
+                    <div style="margin-left: 20px; line-height: 1.6;">
+                        <span style="font-size:14px; margin-right:5px;">☒</span> ${d.pdfInterpHTML}
                     </div>
                 </div>
 
-                <!-- D) Comments -->
                 <div class="avoid-break" style="margin-bottom: 15px; font-size: 12px;">
                     <h4 style="margin: 0 0 5px 0; font-size: 13px;">D) Comments:</h4>
-                    <div style="margin-left: 20px;">- ${d.comments ? d.comments.replace(/\n/g, '<br>') : ''}</div>
+                    <div style="margin-left: 20px;">${d.comments ? d.comments.replace(/\n/g, '<br>') : '-'}</div>
                 </div>
 
-                <!-- E) Suggestion -->
                 <div class="avoid-break" style="margin-bottom: 25px; font-size: 12px;">
                     <h4 style="margin: 0 0 5px 0; font-size: 13px;">E) Suggestion:</h4>
                     <div style="margin-left: 20px;">
-                        <span style="font-size:14px; margin-right:5px;">${chk(d.isRepeat36)}</span> Repeat Pap Smear 3-6 month
+                        ${d.pdfSuggText}
                     </div>
                 </div>
 
                 <hr style="border: 0; border-top: 1px dashed #ccc; margin: 15px 0;">
 
-                <!-- LAB USE ONLY / VALIDATION -->
                 <div class="avoid-break" style="background-color: #fafafa; padding: 15px; border: 1px solid #ccc; font-size: 11px;">
                     <h4 style="margin: 0 0 10px 0; font-size: 12px;">LAB USE ONLY</h4>
                     <p style="margin: 0 0 15px 0; font-style: italic; color: #666;">(This is a computer-generated report. Validated electronically.)</p>
@@ -867,7 +894,7 @@
                             </td>
                             <td style="width: 50%; vertical-align: top;">
                                 <strong style="text-decoration: underline;">Pathologist</strong><br><br>
-                                <strong>Validated by:</strong> Dr. Alice Wong<br>
+                                <strong>Validated by:</strong> ${screener}<br>
                                 <strong>Designation/Stamp:</strong> Pathologist (MMC: 43521)<br>
                                 <strong>Date reporting:</strong> ${today}<br>
                                 <strong>Date Printing:</strong> ${today}
@@ -878,29 +905,24 @@
             </div>
         `;
 
-        // 【关键修复 2】：绝不使用 left: -9999px 这种会让 html2canvas 变成白屏的歪招！
-        // 做法是：1. 隐藏原有的表单主界面；2. 把 PDF 渲染区变成真实的 display: block 显示在网页最下方；3. 渲染完成后恢复。
         var mainForm = document.getElementById('main_form_container');
         var printArea = document.getElementById('pdf_print_area');
         
-        mainForm.style.display = 'none'; // 暂时隐藏主表单
+        mainForm.style.display = 'none'; 
         printArea.innerHTML = printContent;
-        printArea.style.display = 'block'; // 真实显示在页面底层
+        printArea.style.display = 'block';
 
-        // 稍微等待 100毫秒，让浏览器彻底把新加入的 DOM 渲染出来
         setTimeout(function() {
             var opt = {
-                margin:       0.3,
+                margin:       10, // ChatGPT 建议的 A4 兼容毫米单位
                 filename:     'Cytology_Report_' + cytoNo + '.pdf',
                 image:        { type: 'jpeg', quality: 0.98 },
-                pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }, // 这一行告诉 html2pdf 不要切碎带 avoid-break 的元素
+                pagebreak:    { mode: ['css', 'legacy'] }, // 采纳建议：移除 avoid-all 允许自然分页
                 html2canvas:  { scale: 2, useCORS: true }, 
-                jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' }
+                jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
             };
 
-            // 真正的截图开始
             html2pdf().set(opt).from(printArea).save().then(function() {
-                // 截图完成，恢复原状并跳走
                 printArea.style.display = 'none';
                 mainForm.style.display = 'block';
                 document.getElementById('pdf_loading_overlay').style.display = 'none';
