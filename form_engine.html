@@ -374,7 +374,6 @@
     // ==================== 全局状态与引擎初始化 ====================
     var currentUser = "";
     var isReviewMode = false;
-    var fullReportDataHTML = ""; // 用于存放没 Edit 按钮的纯净版数据
     var mockDatabase = { "800101145555": { name: "SITI AMINAH", race: "Malay" }, "750304141234": { name: "WONG MEI LING", race: "Chinese" } };
 
     function getQueryParam(param) {
@@ -462,7 +461,6 @@
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    // ==================== 原版联动与防呆引擎 ====================
     function formatUppercase(element) { element.value = element.value.toUpperCase(); }
     function handleEnter(e) { if (e.keyCode === 13 || e.key === 'Enter') { e.preventDefault(); checkPatientHistory(); } }
     
@@ -645,7 +643,15 @@
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    // ==================== 抓取引擎与 PDF 数据源分离 ====================
+    // 辅助函数：计算年龄
+    function calculateAge(dobStr) {
+        if (!dobStr) return '-';
+        var dob = new Date(dobStr);
+        var diff_ms = Date.now() - dob.getTime();
+        var age_dt = new Date(diff_ms); 
+        return Math.abs(age_dt.getUTCFullYear() - 1970);
+    }
+
     function generateSummary() {
         var name = document.getElementById('patient_name').value || '-';
         var ic = document.getElementById('ic_no').value || '-';
@@ -653,6 +659,9 @@
         var race = document.getElementById('race').value || '-';
         var dob = document.getElementById('dob').value || '-';
         var cyto = document.getElementById('cyto_no').value || '-';
+        var age = calculateAge(dob);
+        var collDate = document.getElementById('collected_date').value || '-';
+        var recDate = document.getElementById('received_date').value || '-';
         
         var sampleTypeEl = document.querySelector('input[name="sample_type"]:checked');
         var sampleTypeText = '-';
@@ -660,7 +669,7 @@
             if (sampleTypeEl.value === 'conventional') sampleTypeText = 'Conventional Pap Smear';
             else if (sampleTypeEl.value === 'lbc') {
                 var lbcType = document.querySelector('input[name="lbc_type"]:checked');
-                sampleTypeText = 'Liquid-based preparation' + (lbcType ? ' (' + lbcType.value + ')' : '');
+                sampleTypeText = 'Liquid-based preparation' + (lbcType ? ' (Type of LBC: ' + lbcType.value + ')' : '');
             }
         }
 
@@ -671,17 +680,17 @@
             if (adqEl.value === 'satisfactory') {
                 adequacyText = "Satisfactory for evaluation";
                 var endo = document.querySelector('input[name="endo_cells"]:checked');
-                if (endo) adequacyDetails.push("• Endocervical cells: " + (endo.value === 'present' ? 'Present' : 'Absent'));
+                if (endo) adequacyDetails.push("Endocervical cells / transformation zone cells: " + (endo.value === 'present' ? 'Present' : 'Absent'));
                 var satWith = document.querySelectorAll('input[name="sat_with"]:checked');
-                for(var i=0; i<satWith.length; i++) adequacyDetails.push("• With: " + satWith[i].parentNode.innerText.trim());
+                for(var i=0; i<satWith.length; i++) adequacyDetails.push("With: " + satWith[i].parentNode.innerText.trim());
             } else if (adqEl.value === 'unsatisfactory') {
                 adequacyText = "Unsatisfactory for evaluation";
                 var unsatR = document.querySelectorAll('input[name="unsat_reason"]:checked');
-                for(var j=0; j<unsatR.length; j++) adequacyDetails.push("• Reasons: " + unsatR[j].parentNode.innerText.trim());
+                for(var j=0; j<unsatR.length; j++) adequacyDetails.push("Reasons: " + unsatR[j].parentNode.innerText.trim());
             }
         }
-        var fullAdequacy = '<div style="font-weight:bold; color:' + (adqEl && adqEl.value==='unsatisfactory' ? '#dc3545' : '#28a745') + ';">' + adequacyText + '</div>';
-        if (adequacyDetails.length > 0) fullAdequacy += '<div style="font-size:0.85rem; color:#555; margin-top:5px; padding-left:5px; border-left:2px solid #ccc;">' + adequacyDetails.join('<br>') + '</div>';
+        var fullAdequacyHTML = '<strong>' + adequacyText + '</strong>';
+        if (adequacyDetails.length > 0) fullAdequacyHTML += '<br> - ' + adequacyDetails.join('<br> - ');
 
         var intEl = document.querySelector('input[name="interpretation"]:checked');
         var interpText = '-';
@@ -690,9 +699,9 @@
             if (intEl.value === 'nilm') {
                 interpText = "Negative for intraepithelial lesion malignancy (NILM)";
                 var orgs = document.querySelectorAll('input[name="nilm_org"]:checked');
-                for(var k=0; k<orgs.length; k++) interpDetails.push("• Organisms: " + orgs[k].parentNode.innerText.trim());
+                for(var k=0; k<orgs.length; k++) interpDetails.push("Organism present: " + orgs[k].parentNode.innerText.trim());
                 var ben = document.querySelectorAll('input[name="nilm_benign"]:checked');
-                for(var m=0; m<ben.length; m++) interpDetails.push("• Benign changes: " + ben[m].parentNode.innerText.trim());
+                for(var m=0; m<ben.length; m++) interpDetails.push("Other non-neoplastic findings: " + ben[m].parentNode.innerText.trim());
             } else if (intEl.value === 'abnormal') {
                 interpText = "Epithelial cells abnormalities";
                 var sqMain = document.querySelector('input[name="abn_sq_main"]:checked');
@@ -700,84 +709,75 @@
                     var sqT = sqMain.parentNode.innerText.trim();
                     if (sqMain.value === 'atypical') {
                         var sqAty = document.querySelector('input[name="abn_sq_atypical"]:checked');
-                        if (sqAty) sqT += " ➔ " + sqAty.parentNode.innerText.trim();
+                        if (sqAty) sqT += " - " + sqAty.parentNode.innerText.trim();
                     } else if (sqMain.value === 'hsil') {
                         var sqHs = document.querySelector('input[name="abn_sq_hsil_invasion"]:checked');
-                        if (sqHs) sqT += " ➔ " + sqHs.parentNode.innerText.trim();
+                        if (sqHs) sqT += " - " + sqHs.parentNode.innerText.trim();
                     }
-                    interpDetails.push("• Squamous cell: " + sqT);
+                    interpDetails.push("a) Squamous cell: " + sqT);
                 }
                 var glMain = document.querySelector('input[name="abn_gl_main"]:checked');
                 if (glMain) {
                     var glT = glMain.parentNode.innerText.trim();
                     if (glMain.value === 'atypical_nos') {
                         var glNos = document.querySelector('input[name="abn_gl_nos"]:checked');
-                        if (glNos) glT += " ➔ " + glNos.parentNode.innerText.trim();
+                        if (glNos) glT += " - " + glNos.parentNode.innerText.trim();
                     } else if (glMain.value === 'atypical_favour') {
                         var glFav = document.querySelector('input[name="abn_gl_favour"]:checked');
-                        if (glFav) glT += " ➔ " + glFav.parentNode.innerText.trim();
+                        if (glFav) glT += " - " + glFav.parentNode.innerText.trim();
                     } else if (glMain.value === 'adeno') {
                         var glAde = document.querySelector('input[name="abn_gl_adeno"]:checked');
-                        if (glAde) glT += " ➔ " + glAde.parentNode.innerText.trim();
+                        if (glAde) glT += " - " + glAde.parentNode.innerText.trim();
                     }
-                    interpDetails.push("• Glandular cells: " + glT);
+                    interpDetails.push("b) Glandular cells: " + glT);
                 }
                 var othMal = document.getElementById('other_malignant').value.trim();
-                if (othMal) interpDetails.push("• Other malignant neoplasm: " + othMal);
+                if (othMal) interpDetails.push("c) Other malignant neoplasm: " + othMal);
             }
         }
-        var fullInterp = '<div style="font-weight:bold; color:' + (intEl && intEl.value==='abnormal' ? '#dc3545' : '#28a745') + ';">' + interpText + '</div>';
-        if (interpDetails.length > 0) fullInterp += '<div style="font-size:0.85rem; color:#555; margin-top:5px; padding-left:5px; border-left:2px solid #ccc;">' + interpDetails.join('<br>') + '</div>';
+        var fullInterpHTML = '<strong>' + interpText + '</strong>';
+        if (interpDetails.length > 0) fullInterpHTML += '<br> - ' + interpDetails.join('<br> - ');
 
         var comments = document.getElementById('comments').value.trim() || 'None';
         var checkedSuggEls = document.querySelectorAll('input[name="suggestion"]:checked');
         var checkedSuggestions = [];
-        for (var n = 0; n < checkedSuggEls.length; n++) checkedSuggestions.push("• " + checkedSuggEls[n].nextElementSibling.innerText.trim());
+        for (var n = 0; n < checkedSuggEls.length; n++) checkedSuggestions.push(" - " + checkedSuggEls[n].nextElementSibling.innerText.trim());
         var otherSugg = document.getElementById('other_suggestion').value.trim();
-        if(otherSugg) checkedSuggestions.push("• Other: " + otherSugg);
+        if(otherSugg) checkedSuggestions.push(" - Other: " + otherSugg);
         var suggestionsText = checkedSuggestions.length > 0 ? checkedSuggestions.join('<br>') : 'None';
 
-        // 1. 生成带有 UI Edit 按钮的网页端 Table
+        // 网页版 Summary 渲染
         var html = '<table class="summary-table">';
         var btnEdit1 = isReviewMode ? '<button class="btn-edit" style="float:right;" onclick="editStep(1)">✏️ Edit</button>' : '';
         html += '<tr style="background:#f8f9fa;"><td colspan="2" style="color:#007bff; font-size:1.05rem;">1. Patient & Sample Profile ' + btnEdit1 + '</td></tr>';
         html += '<tr><td>Patient Name & IC:</td><td><strong>' + name + '</strong> <br><span class="text-muted">' + ic + '</span></td></tr>';
         html += '<tr><td>Demographics:</td><td>Gender: ' + gender + ' &nbsp;|&nbsp; Race: ' + race + ' &nbsp;|&nbsp; DOB: ' + dob + '</td></tr>';
-        html += '<tr><td>Cytology No:</td><td>' + cyto + '</td></tr>';
+        html += '<tr><td>Dates:</td><td>Collected: ' + collDate + ' &nbsp;|&nbsp; Received: ' + recDate + '</td></tr>';
         html += '<tr><td>Sample Type:</td><td>' + sampleTypeText + '</td></tr>';
         
         var btnEdit2 = isReviewMode ? '<button class="btn-edit" style="float:right;" onclick="editStep(2)">✏️ Edit</button>' : '';
         html += '<tr style="background:#f8f9fa;"><td colspan="2" style="color:#28a745; font-size:1.05rem; border-top:1px solid #ccc;">2. Sample Adequacy ' + btnEdit2 + '</td></tr>';
-        html += '<tr><td>Adequacy:</td><td>' + fullAdequacy + '</td></tr>';
+        html += '<tr><td>Adequacy:</td><td>' + fullAdequacyHTML + '</td></tr>';
 
         var btnEdit3 = isReviewMode ? '<button class="btn-edit" style="float:right;" onclick="editStep(3)">✏️ Edit</button>' : '';
         html += '<tr style="background:#f8f9fa;"><td colspan="2" style="color:#dc3545; font-size:1.05rem; border-top:1px solid #ccc;">3. Interpretation / Result ' + btnEdit3 + '</td></tr>';
-        html += '<tr><td>Result:</td><td>' + fullInterp + '</td></tr>';
+        html += '<tr><td>Result:</td><td>' + fullInterpHTML + '</td></tr>';
 
         var btnEdit4 = isReviewMode ? '<button class="btn-edit" style="float:right;" onclick="editStep(4)">✏️ Edit</button>' : '';
         html += '<tr style="background:#f8f9fa;"><td colspan="2" style="color:#6c757d; font-size:1.05rem; border-top:1px solid #ccc;">4. Suggestions & Comments ' + btnEdit4 + '</td></tr>';
         html += '<tr><td>Comments:</td><td>' + comments.replace(/\n/g, '<br>') + '</td></tr>';
         html += '<tr><td>Suggestions:</td><td>' + suggestionsText + '</td></tr>';
         html += '</table>';
-        
         document.getElementById('summary_content').innerHTML = html;
 
-        // 2. 生成纯净版 (无 Edit 按钮) 专供 PDF 打印使用的数据，这与 KKM 表格完美映射
-        fullReportDataHTML = '<table style="width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 20px;">';
-        fullReportDataHTML += '<tr style="background:#f0f0f0;"><td colspan="2" style="padding:8px; border:1px solid #ddd; font-weight:bold;">PATIENT & SAMPLE INFORMATION</td></tr>';
-        fullReportDataHTML += '<tr><td style="padding:8px; border:1px solid #ddd; width:30%;">Name & IC No:</td><td style="padding:8px; border:1px solid #ddd;"><strong>' + name + '</strong> (' + ic + ')</td></tr>';
-        fullReportDataHTML += '<tr><td style="padding:8px; border:1px solid #ddd;">Cytology No:</td><td style="padding:8px; border:1px solid #ddd;">' + cyto + '</td></tr>';
-        fullReportDataHTML += '<tr><td style="padding:8px; border:1px solid #ddd;">Sample Type (A):</td><td style="padding:8px; border:1px solid #ddd;">' + sampleTypeText + '</td></tr>';
-        fullReportDataHTML += '<tr style="background:#f0f0f0;"><td colspan="2" style="padding:8px; border:1px solid #ddd; font-weight:bold;">CLINICAL FINDINGS & INTERPRETATION</td></tr>';
-        fullReportDataHTML += '<tr><td style="padding:8px; border:1px solid #ddd;">Sample Adequacy (B):</td><td style="padding:8px; border:1px solid #ddd;">' + fullAdequacy + '</td></tr>';
-        fullReportDataHTML += '<tr><td style="padding:8px; border:1px solid #ddd;">Result (C):</td><td style="padding:8px; border:1px solid #ddd;">' + fullInterp + '</td></tr>';
-        fullReportDataHTML += '<tr style="background:#f0f0f0;"><td colspan="2" style="padding:8px; border:1px solid #ddd; font-weight:bold;">SUGGESTIONS</td></tr>';
-        fullReportDataHTML += '<tr><td style="padding:8px; border:1px solid #ddd;">Comments (D):</td><td style="padding:8px; border:1px solid #ddd;">' + comments.replace(/\n/g, '<br>') + '</td></tr>';
-        fullReportDataHTML += '<tr><td style="padding:8px; border:1px solid #ddd;">Suggestion (E):</td><td style="padding:8px; border:1px solid #ddd;">' + suggestionsText + '</td></tr>';
-        fullReportDataHTML += '</table>';
+        // 全局变量注入给 PDF 渲染引擎使用
+        window.pdfData = {
+            name: name, ic: ic, dob: dob, age: age, gender: gender, cyto: cyto, collDate: collDate, recDate: recDate,
+            sampleTypeText: sampleTypeText, fullAdequacyHTML: fullAdequacyHTML, fullInterpHTML: fullInterpHTML, 
+            comments: comments, suggestionsText: suggestionsText
+        };
     }
 
-    // ==================== 最终提交与生成官方 PDF 报告引擎 ====================
     function submitFinalReport() {
         var routingEl = document.querySelector('input[name="routing_action"]:checked');
         if (!routingEl) { alert("⚠️ LAB USE ONLY: Please select Next Action or Validate before submission."); return; }
@@ -786,77 +786,115 @@
         var patientName = document.getElementById('patient_name').value;
         var cytoNo = document.getElementById('cyto_no').value || "UNKNOWN";
 
-        // 如果用户选择了 Finalize (签发)，则触发 PDF 生成逻辑
         if (routingVal === 'finalize') {
             document.getElementById('btn_submit').innerText = "Generating PDF...";
             document.getElementById('btn_submit').disabled = true;
             generateOfficialPDF(cytoNo, patientName);
         } else {
-            // 普通流转给别人
             alert("ℹ️ SUBMITTED. Report has been routed successfully.");
             window.location.href = 'dashboard.html';
         }
     }
 
-    // 利用 html2pdf 核心库，构建 1:1 映射 KKM Form 88 的打印版面
+    // ==================== 修改范围：生成 PDF 的专属排版 ====================
     function generateOfficialPDF(cytoNo, patientName) {
         var screener = document.getElementById('screener_name').value;
         var today = new Date().toLocaleDateString('en-GB');
+        var d = window.pdfData; // 提取预存的表单数据
 
-        // 构建纯打印专用的 HTML 结构 (对齐 KKM Form 88)
         var printContent = `
-            <div style="padding: 40px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #333;">
+            <div style="padding: 40px; font-family: 'Arial', sans-serif; color: #000; line-height: 1.5;">
                 
-                <!-- KKM Form 88 官方表头 -->
-                <div style="text-align: center; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 10px;">
-                    <h2 style="margin: 0; font-size: 18px; text-transform: uppercase;">Kementerian Kesihatan Malaysia</h2>
-                    <h3 style="margin: 5px 0; font-size: 16px;">Perkhidmatan Patologi</h3>
-                    <h3 style="margin: 10px 0 0 0; font-size: 15px; text-decoration: underline;">CYTOLOGY (PAP SMEAR/LBC) REPORT</h3>
+                <!-- 顶部 KKM Logo 居中抬头 -->
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Emblem_of_the_Ministry_of_Health_%28Malaysia%29.svg/100px-Emblem_of_the_Ministry_of_Health_%28Malaysia%29.svg.png" alt="KKM Logo" style="height: 80px; margin-bottom: 10px;">
+                    <h3 style="margin: 0; font-size: 16px;">KEMENTERIAN KESIHATAN MALAYSIA</h3>
+                    <p style="margin: 5px 0 0 0; font-size: 14px; font-weight: bold;">HOSPITAL SIBU</p>
+                    <p style="margin: 2px 0; font-size: 12px;">Jalan Ulu Oya, 96000 Sibu, Sarawak, Malaysia</p>
+                    <p style="margin: 2px 0 10px 0; font-size: 12px;">Tel: 084-343 333</p>
+                    <h2 style="margin: 15px 0 0 0; font-size: 18px; border-bottom: 2px solid #000; padding-bottom: 5px;">CYTOLOGY REPORT</h2>
                 </div>
 
-                <!-- 注入我们在 generateSummary 里生成好的纯净版 Data Table -->
-                ${fullReportDataHTML}
+                <!-- PATIENT & SAMPLE INFORMATION -->
+                <div style="margin-bottom: 20px;">
+                    <h4 style="background-color: #f0f0f0; padding: 5px; margin: 0 0 10px 0; border: 1px solid #ccc; font-size: 14px;">PATIENT & SAMPLE INFORMATION</h4>
+                    <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
+                        <tr><td style="width: 25%; font-weight: bold;">Name:</td><td>${d.name}</td></tr>
+                        <tr><td style="font-weight: bold;">IC No:</td><td>${d.ic}</td></tr>
+                        <tr><td style="font-weight: bold;">DOB:</td><td>${d.dob} (Age: ${d.age})</td></tr>
+                        <tr><td style="font-weight: bold;">Gender:</td><td>${d.gender}</td></tr>
+                        <tr><td style="font-weight: bold;">Cytology No:</td><td>${d.cyto}</td></tr>
+                        <tr><td style="font-weight: bold;">Collection Date:</td><td>${d.collDate}</td></tr>
+                        <tr><td style="font-weight: bold;">Received Date:</td><td>${d.recDate}</td></tr>
+                    </table>
+                </div>
 
-                <!-- KKM Form 88 底部的 LAB USE ONLY 签字区 -->
-                <div style="border: 2px solid #333; padding: 15px; margin-top: 30px; background-color: #fafafa;">
-                    <h4 style="margin: 0 0 15px 0; border-bottom: 1px solid #ccc; padding-bottom: 5px;">LAB USE ONLY - VALIDATION</h4>
-                    <table style="width: 100%; font-size: 13px;">
+                <hr style="border: 0; border-top: 1px solid #eee; margin: 15px 0;">
+
+                <!-- CLINICAL RESULTS (A to E) -->
+                <div style="font-size: 13px;">
+                    <h4 style="margin: 15px 0 5px 0; font-size: 14px;">A) Type of sample:</h4>
+                    <div style="margin-left: 15px;">- ${d.sampleTypeText}</div>
+
+                    <h4 style="margin: 15px 0 5px 0; font-size: 14px;">B) Sample Adequacy:</h4>
+                    <div style="margin-left: 15px;">- ${d.fullAdequacyHTML}</div>
+
+                    <h4 style="margin: 15px 0 5px 0; font-size: 14px;">C) Interpretation / Result:</h4>
+                    <div style="margin-left: 15px;">- ${d.fullInterpHTML}</div>
+
+                    <h4 style="margin: 15px 0 5px 0; font-size: 14px;">D) Comments:</h4>
+                    <div style="margin-left: 15px;">- ${d.comments.replace(/\n/g, '<br>')}</div>
+
+                    <h4 style="margin: 15px 0 5px 0; font-size: 14px;">E) Suggestion:</h4>
+                    <div style="margin-left: 15px;">${d.suggestionsText}</div>
+                </div>
+
+                <hr style="border: 0; border-top: 1px dashed #ccc; margin: 25px 0;">
+
+                <!-- LAB USE ONLY / VALIDATION (对齐表单底端) -->
+                <div style="background-color: #fafafa; padding: 15px; border: 1px solid #ccc;">
+                    <h4 style="margin: 0 0 15px 0; text-align: center; font-size: 14px; text-decoration: underline;">LAB USE ONLY</h4>
+                    <p style="font-size: 11px; text-align: center; font-style: italic; color: #555; margin-bottom: 20px;">(This is a computer-generated report. Validated electronically.)</p>
+                    
+                    <table style="width: 100%; font-size: 12px; border-collapse: collapse;">
                         <tr>
-                            <td style="width: 50%; padding-bottom: 15px;"><strong>Validated by:</strong><br><br><span style="font-family: 'Courier New', Courier, monospace; font-size: 16px;"><i>Digitally Signed</i></span></td>
-                            <td style="width: 50%; padding-bottom: 15px;"><strong>Date Printing:</strong><br><br>${today}</td>
-                        </tr>
-                        <tr>
-                            <td style="padding-bottom: 15px;"><strong>Designation/Stamp:</strong><br><br><span style="color:#007bff; font-weight:bold;">${screener}</span></td>
-                            <td style="padding-bottom: 15px;"><strong>Action Taken:</strong><br><br>Finalized & Verified</td>
+                            <td style="width: 50%; vertical-align: top;">
+                                <strong style="text-decoration: underline;">First Screener</strong><br><br>
+                                <strong>Result reviewed by:</strong> Nurul Huda (Cytotechnologist)<br>
+                                <strong>Action:</strong> Route to Pathologist<br>
+                                <strong>Date:</strong> 20/12/2026
+                            </td>
+                            <td style="width: 50%; vertical-align: top;">
+                                <strong style="text-decoration: underline;">Pathologist</strong><br><br>
+                                <strong>Validated by:</strong> Dr. Alice Wong<br>
+                                <strong>Designation/Stamp:</strong> Pathologist (MMC: 43521)<br>
+                                <strong>Date reporting:</strong> ${today}<br>
+                                <strong>Date Printing:</strong> ${today}
+                            </td>
                         </tr>
                     </table>
                 </div>
-                
-                <div style="text-align: center; margin-top: 40px; font-size: 10px; color: #999;">
-                    This is a computer-generated report. No physical signature is required. <br>
-                    Ref: KKM Form 88.H429 B Compliant
-                </div>
+
             </div>
         `;
 
-        // 注入到隐藏区域
+        // 注入到隐藏区域用于 PDF 抓取
         var printArea = document.getElementById('pdf_print_area');
         printArea.innerHTML = printContent;
-        printArea.style.display = 'block'; // 临时显示供渲染
+        printArea.style.display = 'block'; 
 
-        // 配置 html2pdf 参数
+        // 配置 html2pdf 参数 (确保图片跨域加载和排版比例)
         var opt = {
-            margin:       0.5,
+            margin:       0.3,
             filename:     'Cytology_Report_' + cytoNo + '.pdf',
             image:        { type: 'jpeg', quality: 0.98 },
-            html2canvas:  { scale: 2 },
+            html2canvas:  { scale: 2, useCORS: true }, 
             jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' }
         };
 
-        // 执行生成并下载
         html2pdf().set(opt).from(printArea).save().then(function() {
-            printArea.style.display = 'none'; // 渲染完立刻隐藏
-            alert("✅ SUCCESS! PDF Report for " + patientName + " has been successfully generated and downloaded.");
+            printArea.style.display = 'none'; 
+            alert("✅ SUCCESS! PDF Report for " + patientName + " has been generated.");
             window.location.href = 'dashboard.html';
         });
     }
