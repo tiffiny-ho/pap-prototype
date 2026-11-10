@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pap Smear / LBC Report System - Smart Engine</title>
-    <!-- 引入强大的纯前端 PDF 生成引擎 -->
+    <!-- 引入前端 PDF 生成引擎 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     
     <style>
@@ -36,10 +36,8 @@
         .radio-card { border: 2px solid #dee2e6; border-radius: 8px; padding: 15px; margin-bottom: 15px; cursor: pointer; transition: all 0.3s ease; display: block; }
         .radio-card:hover { border-color: #4CAF50; background-color: #f1f8f1; }
         .radio-card.active { border-color: #4CAF50; background-color: #e8f5e9; }
-        .radio-card.gray-out { opacity: 0.4; filter: grayscale(100%); border-color: #ddd; background-color: #fafafa; }
         
         .checkbox-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
-        
         .sub-panel { padding: 20px; background: #fff; border: 1px solid #c3e6cb; border-radius: 6px; margin-top: 10px; transition: 0.3s; }
         .sub-panel.danger { border-color: #f5c6cb; background: #fdfdfe; }
         
@@ -61,25 +59,34 @@
         .summary-table td:first-child { font-weight: bold; width: 30%; color: #444; background: #f8f9fa; border-right: 1px solid #eee; }
         
         .alert-banner { background-color: #cce5ff; color: #004085; padding: 15px; border-radius: 6px; margin-bottom: 20px; border: 1px solid #b8daff; font-size: 0.95rem; }
-        
-        /* 
-           修复 PDF 截断的终极法宝：
-           1. 把区域移出屏幕（而不是 display: none），确保能计算真实高度。
-           2. 使用避免分页切断的 page-break 属性。
-        */
-        #pdf_print_area { 
-            position: absolute; 
-            top: -9999px; 
-            left: -9999px; 
-            width: 800px; /* 强制给一个类似 A4 的宽度 */
-            background: white; 
+
+        /* 全屏遮罩层：生成 PDF 时给用户的等待提示 */
+        #pdf_loading_overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.95); z-index: 9999; text-align: center; padding-top: 20vh;
         }
+        
+        /* 真实的 PDF 渲染区，平时完全不展示 (display:none)。只有生成时才变成 block */
+        #pdf_print_area {
+            display: none;
+            width: 800px;
+            background: white;
+            margin: 0 auto;
+        }
+        
+        /* 告诉 html2pdf 引擎，遇到这里不要拦腰切断 (避免内容截断) */
         .avoid-break { page-break-inside: avoid; }
     </style>
 </head>
 <body onload="initPage()">
 
-<div class="form-container">
+<!-- 加载遮罩 -->
+<div id="pdf_loading_overlay">
+    <h1 style="color: #007bff;">⏳ Generating Official Report...</h1>
+    <p>Please wait while the PDF is being securely generated.</p>
+</div>
+
+<div class="form-container" id="main_form_container">
     
     <!-- ==================== STEP 1 ==================== -->
     <div id="step1" class="wizard-step hidden">
@@ -215,7 +222,7 @@
                 </div>
             </div>
             <div class="category-box">
-                <div class="category-title">b) Other non-neoplastic findings (Benign cellular changes associated with):</div>
+                <div class="category-title">b) Other non-neoplastic findings:</div>
                 <div class="checkbox-grid">
                     <label class="check-item"><input type="checkbox" name="nilm_benign" value="inflammation"> <span>Inflammation / typical repair</span></label>
                     <label class="check-item"><input type="checkbox" name="nilm_benign" value="iucd"> <span>Intrauterine contraceptive device (IUCD)</span></label>
@@ -313,7 +320,7 @@
                 <label class="check-item"><input type="checkbox" name="suggestion" value="repeat_anti"> <span>Repeat smear after antimicrobial treatment</span></label>
                 <label class="check-item"><input type="checkbox" name="suggestion" value="hpvdna"> <span>HPV DNA</span></label>
                 <label class="check-item"><input type="checkbox" name="suggestion" value="repeat_oes"> <span>Repeat smear after oestrogen therapy</span></label>
-                <label class="check-item"><input type="checkbox" name="suggestion" value="refer_gynae"> <span>Refer to Gynaecologist / Gynaecological Oncologist</span></label>
+                <label class="check-item"><input type="checkbox" name="suggestion" value="refer_gynae"> <span>Refer to Gynaecologist</span></label>
             </div>
             <div class="form-group" style="margin-top: 15px; margin-bottom: 0;">
                 <input type="text" id="other_suggestion" placeholder="Other suggestions..." oninput="formatUppercase(this)">
@@ -376,13 +383,12 @@
         </div>
     </div>
 
-</div>
+</div> <!-- main_form_container 结束 -->
 
-<!-- 这个隐藏的 DIV 将被强行置于屏幕之外，让浏览器能正确计算它的物理高度，避免断崖式截断 -->
+<!-- 真正的打印渲染区：平时隐藏，生成时临时显示！ -->
 <div id="pdf_print_area"></div>
 
 <script>
-    // ==================== 全局状态与引擎初始化 ====================
     var currentUser = "";
     var isReviewMode = false;
     var mockDatabase = { "800101145555": { name: "SITI AMINAH", race: "Malay" }, "750304141234": { name: "WONG MEI LING", race: "Chinese" } };
@@ -465,13 +471,13 @@
 
     function returnToSummary(currentStep) {
         if(!validateStep(currentStep)) return;
-        
         document.getElementById('step' + currentStep).classList.add('hidden');
         generateSummary(); 
         document.getElementById('step5').classList.remove('hidden');
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
+    // 联动表单逻辑
     function formatUppercase(element) { element.value = element.value.toUpperCase(); }
     function handleEnter(e) { if (e.keyCode === 13 || e.key === 'Enter') { e.preventDefault(); checkPatientHistory(); } }
     
@@ -491,8 +497,7 @@
             var yy = parseInt(cleanIC.substring(0, 2), 10);
             var mm = cleanIC.substring(2, 4);
             var dd = cleanIC.substring(4, 6);
-            var currentYY = new Date().getFullYear() % 100;
-            var year = yy > currentYY ? 1900 + yy : 2000 + yy;
+            var year = yy > (new Date().getFullYear() % 100) ? 1900 + yy : 2000 + yy;
             dobField.value = year + '-' + mm + '-' + dd;
         }
         
@@ -654,7 +659,6 @@
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    // 辅助函数：计算年龄
     function calculateAge(dobStr) {
         if (!dobStr) return '-';
         var dob = new Date(dobStr);
@@ -670,6 +674,10 @@
         var race = document.getElementById('race').value || '-';
         var dob = document.getElementById('dob').value || '-';
         var cyto = document.getElementById('cyto_no').value || '-';
+        
+        // 关键修复 1：提取遗漏的 Location 字段
+        var loc = document.getElementById('location').value || '-'; 
+        
         var age = calculateAge(dob);
         var collDate = document.getElementById('collected_date').value || '-';
         var recDate = document.getElementById('received_date').value || '-';
@@ -702,26 +710,36 @@
         var isRepeat36 = false;
         for(var s=0; s<suggEls.length; s++) { if(suggEls[s].value === 'repeat_3_6m') isRepeat36 = true; }
 
-        // 网页版 Summary 渲染
+        // ============ 网页版 Summary 渲染 ============
         var html = '<table class="summary-table">';
-        html += '<tr style="background:#f8f9fa;"><td colspan="2" style="color:#007bff; font-size:1.05rem;">1. Patient & Sample Profile</td></tr>';
+        var btnEdit1 = isReviewMode ? '<button class="btn-edit" style="float:right;" onclick="editStep(1)">✏️ Edit</button>' : '';
+        html += '<tr style="background:#f8f9fa;"><td colspan="2" style="color:#007bff; font-size:1.05rem;">1. Patient & Sample Profile ' + btnEdit1 + '</td></tr>';
         html += '<tr><td>Patient Name & IC:</td><td><strong>' + name + '</strong> <br><span class="text-muted">' + ic + '</span></td></tr>';
+        html += '<tr><td>Demographics:</td><td>Gender: ' + gender + ' &nbsp;|&nbsp; Race: ' + race + ' &nbsp;|&nbsp; DOB: ' + dob + '</td></tr>';
+        
+        // 【关键修复 1】：将 Location 展示在网页端 Summary 中
+        html += '<tr><td>Location / Clinic:</td><td><strong>' + loc + '</strong></td></tr>';
+        
+        html += '<tr><td>Dates:</td><td>Collected: ' + collDate + ' &nbsp;|&nbsp; Received: ' + recDate + '</td></tr>';
         html += '<tr><td>Sample Type:</td><td>' + sampleTypeText + '</td></tr>';
         
-        html += '<tr style="background:#f8f9fa;"><td colspan="2" style="color:#28a745; font-size:1.05rem; border-top:1px solid #ccc;">2. Sample Adequacy</td></tr>';
+        var btnEdit2 = isReviewMode ? '<button class="btn-edit" style="float:right;" onclick="editStep(2)">✏️ Edit</button>' : '';
+        html += '<tr style="background:#f8f9fa;"><td colspan="2" style="color:#28a745; font-size:1.05rem; border-top:1px solid #ccc;">2. Sample Adequacy ' + btnEdit2 + '</td></tr>';
         html += '<tr><td>Adequacy:</td><td>' + adequacyText + '</td></tr>';
 
-        html += '<tr style="background:#f8f9fa;"><td colspan="2" style="color:#dc3545; font-size:1.05rem; border-top:1px solid #ccc;">3. Interpretation / Result</td></tr>';
+        var btnEdit3 = isReviewMode ? '<button class="btn-edit" style="float:right;" onclick="editStep(3)">✏️ Edit</button>' : '';
+        html += '<tr style="background:#f8f9fa;"><td colspan="2" style="color:#dc3545; font-size:1.05rem; border-top:1px solid #ccc;">3. Interpretation / Result ' + btnEdit3 + '</td></tr>';
         html += '<tr><td>Result:</td><td>' + (isAbnormal ? 'Epithelial cells abnormalities' : 'NILM') + '</td></tr>';
 
-        html += '<tr style="background:#f8f9fa;"><td colspan="2" style="color:#6c757d; font-size:1.05rem; border-top:1px solid #ccc;">4. Suggestions & Comments</td></tr>';
+        var btnEdit4 = isReviewMode ? '<button class="btn-edit" style="float:right;" onclick="editStep(4)">✏️ Edit</button>' : '';
+        html += '<tr style="background:#f8f9fa;"><td colspan="2" style="color:#6c757d; font-size:1.05rem; border-top:1px solid #ccc;">4. Suggestions & Comments ' + btnEdit4 + '</td></tr>';
         html += '<tr><td>Comments:</td><td>' + (comments || 'None') + '</td></tr>';
         html += '</table>';
         document.getElementById('summary_content').innerHTML = html;
 
-        // 全局变量注入给 PDF 渲染引擎使用
+        // 全局变量注入给 PDF 渲染引擎使用，加入 loc
         window.pdfData = {
-            name: name, ic: ic, dob: dob, age: age, gender: gender, cyto: cyto, collDate: collDate, recDate: recDate,
+            name: name, ic: ic, dob: dob, age: age, gender: gender, cyto: cyto, loc: loc, collDate: collDate, recDate: recDate,
             sampleTypeText: sampleTypeText, isThinPrep: isThinPrep, 
             isSatisfactory: isSatisfactory, isEndoPresent: isEndoPresent, 
             isAbnormal: isAbnormal, isHsil: isHsil, 
@@ -738,7 +756,6 @@
         var cytoNo = document.getElementById('cyto_no').value || "UNKNOWN";
 
         if (routingVal === 'finalize') {
-            document.getElementById('btn_submit').innerText = "Generating PDF...";
             document.getElementById('btn_submit').disabled = true;
             generateOfficialPDF(cytoNo, patientName);
         } else {
@@ -747,19 +764,21 @@
         }
     }
 
-    // ==================== 修复 PDF 排版截断的核心逻辑 ====================
+    // ==================== 终极 PDF 防截断渲染引擎 ====================
     function generateOfficialPDF(cytoNo, patientName) {
+        // 打开全屏“Generating”遮罩层，防止用户乱点
+        document.getElementById('pdf_loading_overlay').style.display = 'block';
+        
         var screener = document.getElementById('screener_name').value;
         var today = new Date().toLocaleDateString('en-GB');
         var d = window.pdfData; 
 
-        // 辅助勾选框生成逻辑
         function chk(condition) { return condition ? '☒' : '☐'; }
 
         var printContent = `
-            <div style="padding: 40px; font-family: 'Helvetica', Arial, sans-serif; color: #000; line-height: 1.6;">
+            <div style="padding: 20px 40px; font-family: 'Helvetica', Arial, sans-serif; color: #000; line-height: 1.5; background: white;">
                 
-                <!-- 顶部 KKM Logo 居中抬头 (加上 avoid-break 防止被从中间切开) -->
+                <!-- 顶部 KKM Logo 居中抬头 -->
                 <div class="avoid-break" style="text-align: center; margin-bottom: 25px;">
                     <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Emblem_of_the_Ministry_of_Health_%28Malaysia%29.svg/100px-Emblem_of_the_Ministry_of_Health_%28Malaysia%29.svg.png" alt="KKM Logo" style="height: 70px; margin-bottom: 10px;">
                     <h3 style="margin: 0; font-size: 15px;">KEMENTERIAN KESIHATAN MALAYSIA</h3>
@@ -770,16 +789,21 @@
                 </div>
 
                 <!-- PATIENT & SAMPLE INFORMATION -->
-                <div class="avoid-break" style="margin-bottom: 25px;">
+                <div class="avoid-break" style="margin-bottom: 20px;">
                     <h4 style="background-color: #f5f5f5; padding: 6px; margin: 0 0 10px 0; border: 1px solid #ddd; font-size: 13px;">PATIENT & SAMPLE INFORMATION</h4>
                     <table style="width: 100%; font-size: 12px; border-collapse: collapse;">
-                        <tr><td style="width: 20%; padding:3px 0;"><strong>Name:</strong></td><td style="width: 40%; padding:3px 0;">${d.name}</td>
-                            <td style="width: 15%; padding:3px 0;"><strong>Gender:</strong></td><td style="width: 25%; padding:3px 0;">${d.gender}</td></tr>
-                        <tr><td style="padding:3px 0;"><strong>IC No:</strong></td><td style="padding:3px 0;">${d.ic}</td>
-                            <td style="padding:3px 0;"><strong>Cytology No:</strong></td><td style="padding:3px 0;">${d.cyto}</td></tr>
-                        <tr><td style="padding:3px 0;"><strong>DOB:</strong></td><td style="padding:3px 0;">${d.dob} (Age: ${d.age})</td>
-                            <td style="padding:3px 0;"><strong>Collection Date:</strong></td><td style="padding:3px 0;">${d.collDate}</td></tr>
-                        <tr><td colspan="2"></td><td style="padding:3px 0;"><strong>Received Date:</strong></td><td style="padding:3px 0;">${d.recDate}</td></tr>
+                        <tr><td style="width: 20%; padding:4px 0;"><strong>Name:</strong></td><td style="width: 40%; padding:4px 0;">${d.name}</td>
+                            <td style="width: 15%; padding:4px 0;"><strong>Gender:</strong></td><td style="width: 25%; padding:4px 0;">${d.gender}</td></tr>
+                        
+                        <tr><td style="padding:4px 0;"><strong>IC No:</strong></td><td style="padding:4px 0;">${d.ic}</td>
+                            <td style="padding:4px 0;"><strong>Cytology No:</strong></td><td style="padding:4px 0;">${d.cyto}</td></tr>
+                            
+                        <!-- 【关键修复 1】：将 Location 放进 PDF -->
+                        <tr><td style="padding:4px 0;"><strong>DOB:</strong></td><td style="padding:4px 0;">${d.dob} (Age: ${d.age})</td>
+                            <td style="padding:4px 0;"><strong>Location:</strong></td><td style="padding:4px 0;">${d.loc}</td></tr>
+                            
+                        <tr><td style="padding:4px 0;"><strong>Collection Date:</strong></td><td style="padding:4px 0;">${d.collDate}</td>
+                            <td style="padding:4px 0;"><strong>Received Date:</strong></td><td style="padding:4px 0;">${d.recDate}</td></tr>
                     </table>
                 </div>
 
@@ -828,7 +852,7 @@
 
                 <hr style="border: 0; border-top: 1px dashed #ccc; margin: 15px 0;">
 
-                <!-- LAB USE ONLY / VALIDATION (加上 avoid-break 防止被切断) -->
+                <!-- LAB USE ONLY / VALIDATION -->
                 <div class="avoid-break" style="background-color: #fafafa; padding: 15px; border: 1px solid #ccc; font-size: 11px;">
                     <h4 style="margin: 0 0 10px 0; font-size: 12px;">LAB USE ONLY</h4>
                     <p style="margin: 0 0 15px 0; font-style: italic; color: #666;">(This is a computer-generated report. Validated electronically.)</p>
@@ -851,31 +875,39 @@
                         </tr>
                     </table>
                 </div>
-
             </div>
         `;
 
-        // 将内容注入到隐藏的高级缓冲层
+        // 【关键修复 2】：绝不使用 left: -9999px 这种会让 html2canvas 变成白屏的歪招！
+        // 做法是：1. 隐藏原有的表单主界面；2. 把 PDF 渲染区变成真实的 display: block 显示在网页最下方；3. 渲染完成后恢复。
+        var mainForm = document.getElementById('main_form_container');
         var printArea = document.getElementById('pdf_print_area');
-        printArea.innerHTML = printContent;
         
-        // 【关键修复】：不使用 display: none，而是将该区域推到屏幕外面。这样 html2pdf 就能拿到正确的高度计算！
-        printArea.style.opacity = '1'; 
+        mainForm.style.display = 'none'; // 暂时隐藏主表单
+        printArea.innerHTML = printContent;
+        printArea.style.display = 'block'; // 真实显示在页面底层
 
-        // 配置 html2pdf 参数 (加入 pagebreak 配置以支持 .avoid-break 样式)
-        var opt = {
-            margin:       0.4,
-            filename:     'Cytology_Report_' + cytoNo + '.pdf',
-            image:        { type: 'jpeg', quality: 0.98 },
-            pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }, // 强制避免切碎 div
-            html2canvas:  { scale: 2, useCORS: true, logging: false }, 
-            jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' }
-        };
+        // 稍微等待 100毫秒，让浏览器彻底把新加入的 DOM 渲染出来
+        setTimeout(function() {
+            var opt = {
+                margin:       0.3,
+                filename:     'Cytology_Report_' + cytoNo + '.pdf',
+                image:        { type: 'jpeg', quality: 0.98 },
+                pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }, // 这一行告诉 html2pdf 不要切碎带 avoid-break 的元素
+                html2canvas:  { scale: 2, useCORS: true }, 
+                jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' }
+            };
 
-        html2pdf().set(opt).from(printArea).save().then(function() {
-            alert("✅ SUCCESS! PDF Report for " + patientName + " has been generated.");
-            window.location.href = 'dashboard.html';
-        });
+            // 真正的截图开始
+            html2pdf().set(opt).from(printArea).save().then(function() {
+                // 截图完成，恢复原状并跳走
+                printArea.style.display = 'none';
+                mainForm.style.display = 'block';
+                document.getElementById('pdf_loading_overlay').style.display = 'none';
+                alert("✅ SUCCESS! PDF Report for " + patientName + " has been generated.");
+                window.location.href = 'dashboard.html';
+            });
+        }, 100);
     }
 </script>
 
