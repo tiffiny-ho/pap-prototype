@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pap Smear / LBC Report System - Smart Engine</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; padding: 20px; margin: 0;}
+        .form-container { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); max-width: 850px; margin: auto; }
+        h2 { border-bottom: 2px solid #4CAF50; padding-bottom: 10px; margin-bottom: 20px; color: #333; display: flex; justify-content: space-between; align-items: center; }
+        .step-indicator { font-size: 0.9rem; color: #666; background: #e9ecef; padding: 5px 10px; border-radius: 20px; }
+        
+        .form-row { display: flex; gap: 15px; margin-bottom: 15px; }
+        .form-group { flex: 1; margin-bottom: 15px; }
+        label { font-weight: 600; display: block; margin-bottom: 5px; color: #444; font-size: 0.9rem; }
+        
+        input[type="text"], input[type="date"], select, textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; background-color: #fff; transition: 0.3s; font-family: inherit; }
+        input[type="text"]:focus, select:focus, textarea:focus { border-color: #4CAF50; outline: none; box-shadow: 0 0 5px rgba(76, 175, 80, 0.3); }
+        input:disabled, select:disabled { background-color: #e9ecef; cursor: not-allowed; }
+        
+        .hidden { display: none !important; }
+        .btn { background-color: #4CAF50; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 1rem; transition: 0.2s; }
+        .btn:hover { background-color: #45a049; }
+        .btn-secondary { background-color: #6c757d; float: left; }
+        .btn-secondary:hover { background-color: #5a6268; }
+        .btn-check { background-color: #007bff; color: white; padding: 10px 15px; border: none; border-radius: 6px; cursor: pointer; white-space: nowrap; font-weight: bold; }
+        .btn-return { background-color: #ff9800; color: white; float: right; }
+        .btn-return:hover { background-color: #e68a00; }
+        
+        .warning-text { color: #d9534f; font-size: 0.8rem; margin-top: 5px; display: none; font-weight: bold; }
+        .section-title { background: #f8f9fa; padding: 10px; margin: 20px 0 15px 0; border-left: 4px solid #007bff; font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
+        
+        .radio-card { border: 2px solid #dee2e6; border-radius: 8px; padding: 15px; margin-bottom: 15px; cursor: pointer; transition: all 0.3s ease; display: block; }
+        .radio-card:hover { border-color: #4CAF50; background-color: #f1f8f1; }
+        .radio-card.active { border-color: #4CAF50; background-color: #e8f5e9; }
+        .radio-card.gray-out { opacity: 0.4; filter: grayscale(100%); border-color: #ddd; background-color: #fafafa; }
+        
+        .checkbox-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+        
+        .sub-panel { padding: 20px; background: #fff; border: 1px solid #c3e6cb; border-radius: 6px; margin-top: 10px; transition: 0.3s; }
+        .sub-panel.danger { border-color: #f5c6cb; background: #fdfdfe; }
+        
+        .category-box { border: 1px solid #e9ecef; padding: 15px; border-radius: 6px; margin-bottom: 15px; background: #fafbfc; position: relative; }
+        .category-title { font-weight: bold; color: #495057; border-bottom: 1px solid #dee2e6; padding-bottom: 5px; margin-bottom: 10px; }
+        
+        .check-item { display: flex; align-items: flex-start; gap: 8px; font-size: 0.9rem; line-height: 1.3; }
+        .check-item input { margin-top: 3px; transform: scale(1.1); }
+        .check-item input:disabled { cursor: not-allowed; opacity: 0.5; }
+        .check-item input:disabled + span, .check-item:has(input:disabled) { color: #999; }
+
+        .btn-clear { float: right; background: none; border: 1px solid #ccc; color: #666; padding: 4px 10px; font-size: 0.8rem; border-radius: 4px; cursor: pointer; transition: 0.2s; font-weight: bold;}
+        .btn-clear:hover { background: #e2e6ea; color: #333; }
+        .btn-edit { background-color: #fff; border: 1px solid #007bff; color: #007bff; padding: 4px 12px; border-radius: 4px; font-size: 0.85rem; cursor: pointer; font-weight: bold;}
+        .btn-edit:hover { background-color: #007bff; color: #fff; }
+
+        .summary-table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 0.95rem; }
+        .summary-table td { padding: 12px; border-bottom: 1px solid #eee; }
+        .summary-table td:first-child { font-weight: bold; width: 30%; color: #444; background: #f8f9fa; border-right: 1px solid #eee; }
+        
+        .alert-banner { background-color: #cce5ff; color: #004085; padding: 15px; border-radius: 6px; margin-bottom: 20px; border: 1px solid #b8daff; font-size: 0.95rem; }
+    </style>
+</head>
+<body onload="initPage()">
+
+<div class="form-container">
+    
+    <!-- ==================== STEP 1 ==================== -->
+    <div id="step1" class="wizard-step hidden">
+        <h2>Step 1: Patient Profile & Sample <span class="step-indicator">1 / 5</span></h2>
+        
+        <input type="hidden" id="request_no">
+        <div class="section-title">1. Patient Verification</div>
+        <div class="form-group">
+            <label>IC / Passport / MRN No: <span style="color:red">*</span></label>
+            <div style="display: flex; gap: 10px;">
+                <input type="text" id="ic_no" placeholder="Enter ID to search history..." oninput="formatUppercase(this)" onkeydown="handleEnter(event)">
+                <button type="button" class="btn-check" onclick="checkPatientHistory()">🔍 Verify</button>
+            </div>
+            <div id="ic_warning" class="warning-text">⚠️ Notice: ID is not 12 digits. Please ensure Passport or MRN is correct.</div>
+        </div>
+        <div class="form-group">
+            <label>Patient Name: <span style="color:red">*</span></label>
+            <input type="text" id="patient_name" placeholder="Waiting for ID verification..." oninput="formatUppercase(this)" disabled>
+        </div>
+        <div class="form-row">
+            <div class="form-group"><label>Gender:</label><select id="gender" disabled><option value="Female" selected>Female</option><option value="Male">Male</option></select></div>
+            <div class="form-group"><label>Race:</label><select id="race" disabled><option value="">-- Select --</option><option value="Malay">Malay</option><option value="Chinese">Chinese</option><option value="Indian">Indian</option><option value="Others">Others</option></select></div>
+            <div class="form-group"><label>Date of Birth:</label><input type="date" id="dob" disabled></div>
+        </div>
+
+        <div class="section-title">2. Request Details</div>
+        <div class="form-row">
+            <div class="form-group"><label>Cytology No:</label><input type="text" id="cyto_no" placeholder="Enter Cytology No..."></div>
+            <div class="form-group">
+                <label>Location (Clinic/Ward): <span style="color:red">*</span></label>
+                <input type="text" list="locations_list" id="location" placeholder="Select or type new location..." oninput="formatUppercase(this)">
+                <datalist id="locations_list"><option value="KLINIK KESIHATAN A"><option value="WARD 4B"><option value="GYNAECOLOGY CLINIC"><option value="OPD"></datalist>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group"><label>Collected Date: <span style="color:red">*</span></label><input type="date" id="collected_date"></div>
+            <div class="form-group"><label>Received Date: <span style="color:red">*</span></label><input type="date" id="received_date"></div>
+        </div>
+
+        <div class="section-title">3. Sample Information</div>
+        <div class="form-group" style="padding: 10px; border: 1px solid #ccc; border-radius: 6px;">
+            <label>A) Type of sample: <span style="color:red">*</span></label>
+            <input type="radio" name="sample_type" value="conventional" onclick="toggleLBC(false)"> Conventional Pap Smear<br><br>
+            <input type="radio" name="sample_type" value="lbc" onclick="toggleLBC(true)"> Liquid-based preparation
+        </div>
+        <div class="form-group hidden" id="lbc_options" style="padding: 10px; background: #fff8e1; border-left: 4px solid #ffc107;">
+            <label>Ai) Type of LBC: <span style="color:red">*</span></label>
+            <input type="radio" name="lbc_type" value="SurePath"> SurePath &nbsp;&nbsp;
+            <input type="radio" name="lbc_type" value="ThinPrep"> ThinPrep &nbsp;&nbsp;
+            <input type="radio" name="lbc_type" value="Others"> Others
+        </div>
+        
+        <div style="margin-top: 30px; overflow: auto;">
+            <div class="nav-normal"><button type="button" class="btn" style="float: right;" onclick="switchStep(1, 2)">Next Step: Adequacy ➔</button></div>
+            <div class="nav-review hidden"><button type="button" class="btn btn-return" onclick="returnToSummary(1)">💾 Save & Return to Summary ➔</button></div>
+        </div>
+    </div>
+    
+    <!-- ==================== STEP 2 ==================== -->
+    <div id="step2" class="wizard-step hidden">
+        <h2>Step 2: Sample Adequacy <span class="step-indicator">2 / 5</span></h2>
+        
+        <div class="section-title">B) Sample Adequacy <span style="color:red">*</span></div>
+        <label class="radio-card" id="card_satisfactory" onclick="selectAdequacy('satisfactory')">
+            <input type="radio" name="adequacy" value="satisfactory" style="transform: scale(1.2); margin-right: 10px;">
+            <span style="font-weight: bold; font-size: 1.1rem; color: #28a745;">i) Satisfactory for evaluation</span>
+        </label>
+        <div id="panel_satisfactory" class="sub-panel hidden">
+            <label style="color:#0056b3;">Endocervical cells / transformation zone cells: <span style="color:red">*</span></label>
+            <div style="margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px dashed #ccc;">
+                <input type="radio" name="endo_cells" value="present" onclick="toggleEndoCells('present')"> Present &nbsp;&nbsp;&nbsp;
+                <input type="radio" name="endo_cells" value="absent" onclick="toggleEndoCells('absent')"> Absent
+            </div>
+            <div id="sat_with_options" class="hidden">
+                <label style="color:#0056b3;">With (Optional):</label>
+                <div class="checkbox-grid">
+                    <label class="check-item"><input type="checkbox" name="sat_with" value="blood"> Obscuring blood</label>
+                    <label class="check-item"><input type="checkbox" name="sat_with" value="poor_fixation"> Poor fixation / air drying artifact</label>
+                    <label class="check-item"><input type="checkbox" name="sat_with" value="thick_uneven"> Thick uneven smear</label>
+                    <label class="check-item"><input type="checkbox" name="sat_with" value="thick_exudate"> Thick inflammatory exudate</label>
+                </div>
+            </div>
+        </div>
+
+        <label class="radio-card" id="card_unsatisfactory" onclick="selectAdequacy('unsatisfactory')" style="margin-top: 20px;">
+            <input type="radio" name="adequacy" value="unsatisfactory" style="transform: scale(1.2); margin-right: 10px;">
+            <span style="font-weight: bold; font-size: 1.1rem; color: #dc3545;">ii) Unsatisfactory for evaluation</span>
+        </label>
+        <div id="panel_unsatisfactory" class="sub-panel danger hidden">
+            <label style="color:#c82333;">Reasons for Unsatisfactory (Tick all that apply): <span style="color:red">*</span></label>
+            <div class="checkbox-grid">
+                <label class="check-item"><input type="checkbox" name="unsat_reason" value="scanty"> Scanty squamous epithelial component</label>
+                <label class="check-item"><input type="checkbox" name="unsat_reason" value="blood"> Obscuring blood</label>
+                <label class="check-item"><input type="checkbox" name="unsat_reason" value="poor_fixation"> Poor fixation / air drying artifact</label>
+                <label class="check-item"><input type="checkbox" name="unsat_reason" value="thick_uneven"> Thick uneven smear</label>
+                <label class="check-item"><input type="checkbox" name="unsat_reason" value="thick_exudate"> Thick inflammatory exudate</label>
+                <label class="check-item"><input type="checkbox" name="unsat_reason" value="broken_slide"> Broken slide beyond repair</label>
+                <label class="check-item"><input type="checkbox" name="unsat_reason" value="lack_data"> Lack of clinical data</label>
+            </div>
+        </div>
+        
+        <div style="margin-top: 30px; overflow: auto;">
+            <div class="nav-normal">
+                <button type="button" class="btn btn-secondary" onclick="switchStep(2, 1)">⬅️ Back</button>
+                <button type="button" class="btn" style="float: right;" onclick="switchStep(2, 3)">Next Step: Interpretation ➔</button>
+            </div>
+            <div class="nav-review hidden"><button type="button" class="btn btn-return" onclick="returnToSummary(2)">💾 Save & Return to Summary ➔</button></div>
+        </div>
+    </div>
+
+    <!-- ==================== STEP 3 ==================== -->
+    <div id="step3" class="wizard-step hidden">
+        <h2>Step 3: Interpretation / Result <span class="step-indicator">3 / 5</span></h2>
+        
+        <div class="section-title">C) Interpretation / Result <span style="color:red">*</span></div>
+        <p style="font-size: 0.9rem; color: #666; margin-bottom: 15px;">Please determine the final cytology result. Branches are mutually exclusive.</p>
+
+        <label class="radio-card" id="card_nilm" onclick="selectInterpretation('nilm')">
+            <input type="radio" name="interpretation" value="nilm" style="transform: scale(1.2); margin-right: 10px;">
+            <span style="font-weight: bold; font-size: 1.1rem; color: #28a745;">i) Negative for intraepithelial lesion malignancy (NILM)</span>
+        </label>
+
+        <div id="panel_nilm" class="sub-panel hidden">
+            <div class="category-box">
+                <div class="category-title">a) Organism present:</div>
+                <div class="checkbox-grid">
+                    <label class="check-item"><input type="checkbox" name="nilm_org" value="candida"> <span>Fungal organism morphologically consistent with Candida spp.</span></label>
+                    <label class="check-item"><input type="checkbox" name="nilm_org" value="bv"> <span>Shift in flora suggestive of bacterial vaginosis</span></label>
+                    <label class="check-item"><input type="checkbox" name="nilm_org" value="actinomyces"> <span>Bacteria morphologically consistent with Actinomyces spp.</span></label>
+                    <label class="check-item"><input type="checkbox" name="nilm_org" value="hsv"> <span>Cellular changes associated with Herpes Simplex Virus</span></label>
+                    <label class="check-item"><input type="checkbox" name="nilm_org" value="trichomonas"> <span>Trichomonas vaginalis</span></label>
+                    <label class="check-item"><input type="checkbox" name="nilm_org" value="cmv"> <span>Cytomegalovirus (CMV)</span></label>
+                </div>
+            </div>
+            <div class="category-box">
+                <div class="category-title">b) Other non-neoplastic findings (Benign cellular changes associated with):</div>
+                <div class="checkbox-grid">
+                    <label class="check-item"><input type="checkbox" name="nilm_benign" value="inflammation"> <span>Inflammation / typical repair</span></label>
+                    <label class="check-item"><input type="checkbox" name="nilm_benign" value="iucd"> <span>Intrauterine contraceptive device (IUCD)</span></label>
+                    <label class="check-item"><input type="checkbox" name="nilm_benign" value="irradiation"> <span>Irradiation</span></label>
+                    <label class="check-item"><input type="checkbox" name="nilm_benign" value="atrophy"> <span>Atrophy</span></label>
+                    <label class="check-item"><input type="checkbox" name="nilm_benign" value="glandular_post_hys"> <span>Presence of glandular cells post hysterectomy</span></label>
+                    <label class="check-item"><input type="checkbox" name="nilm_benign" value="endometrial_45"> <span>Presence of endometrial cells (in woman ≥ 45 yrs of age)</span></label>
+                </div>
+            </div>
+        </div>
+
+        <label class="radio-card" id="card_abnormal" onclick="selectInterpretation('abnormal')" style="margin-top: 20px;">
+            <input type="radio" name="interpretation" value="abnormal" style="transform: scale(1.2); margin-right: 10px;">
+            <span style="font-weight: bold; font-size: 1.1rem; color: #dc3545;">ii) Epithelial cells abnormalities</span>
+        </label>
+
+        <div id="panel_abnormal" class="sub-panel danger hidden">
+            <div class="category-box">
+                <div class="category-title" style="color: #c82333;">
+                    a) Squamous cell: <button type="button" class="btn-clear" onclick="clearSquamous()">Clear Selection</button>
+                </div>
+                <div style="margin-bottom: 15px; display: flex; flex-direction: column; gap: 8px;">
+                    <label class="check-item"><input type="radio" name="abn_sq_main" value="atypical" onclick="toggleSq()"> <span>Atypical squamous cells</span></label>
+                    <div id="sq_atypical_opts" style="margin-left: 28px; padding-left: 10px; border-left: 2px solid #ccc; display: flex; flex-direction: column; gap: 5px;">
+                        <label class="check-item"><input type="radio" name="abn_sq_atypical" value="ascus" disabled> <span>of undetermined significance (ASC-US)</span></label>
+                        <label class="check-item"><input type="radio" name="abn_sq_atypical" value="asch" disabled> <span>cannot exclude HSIL (ASC-H)</span></label>
+                    </div>
+                    <label class="check-item"><input type="radio" name="abn_sq_main" value="lsil" onclick="toggleSq()"> <span>Low grade squamous intraepithelial lesion (LSIL)</span></label>
+                    <label class="check-item"><input type="radio" name="abn_sq_main" value="hsil" onclick="toggleSq()"> <span>High grade squamous intraepithelial lesion (HSIL)</span></label>
+                    <div id="sq_hsil_opts" style="margin-left: 28px; padding-left: 10px; border-left: 2px solid #ccc;">
+                        <label class="check-item"><input type="checkbox" name="abn_sq_hsil_invasion" value="invasion" disabled> <span>with features suspicious for invasion</span></label>
+                    </div>
+                    <label class="check-item"><input type="radio" name="abn_sq_main" value="scc" onclick="toggleSq()"> <span>Squamous cell carcinoma</span></label>
+                </div>
+            </div>
+
+            <div class="category-box">
+                <div class="category-title" style="color: #c82333;">
+                    b) Glandular cells: <button type="button" class="btn-clear" onclick="clearGlandular()">Clear Selection</button>
+                </div>
+                <div style="margin-bottom: 15px; display: flex; flex-direction: column; gap: 8px;">
+                    <label class="check-item"><input type="radio" name="abn_gl_main" value="atypical_nos" onclick="toggleGl()"> <span>Atypical cells (NOS)</span></label>
+                    <div id="gl_atypical_nos_opts" style="margin-left: 28px; padding-left: 10px; border-left: 2px solid #ccc; display: flex; flex-direction: column; gap: 5px;">
+                        <label class="check-item"><input type="radio" name="abn_gl_nos" value="endo" disabled> <span>Endocervical cells</span></label>
+                        <label class="check-item"><input type="radio" name="abn_gl_nos" value="em" disabled> <span>Endometrial cells</span></label>
+                        <label class="check-item"><input type="radio" name="abn_gl_nos" value="glandular" disabled> <span>Glandular cells</span></label>
+                    </div>
+                    <label class="check-item"><input type="radio" name="abn_gl_main" value="atypical_favour" onclick="toggleGl()"> <span>Atypical cells, favour neoplastic</span></label>
+                    <div id="gl_atypical_favour_opts" style="margin-left: 28px; padding-left: 10px; border-left: 2px solid #ccc; display: flex; flex-direction: column; gap: 5px;">
+                        <label class="check-item"><input type="radio" name="abn_gl_favour" value="endo" disabled> <span>Endocervical cell</span></label>
+                        <label class="check-item"><input type="radio" name="abn_gl_favour" value="glandular" disabled> <span>Glandular cells (NOS)</span></label>
+                    </div>
+                    <label class="check-item"><input type="radio" name="abn_gl_main" value="adeno_insitu" onclick="toggleGl()"> <span>Endocervical adenocarcinoma (in-situ)</span></label>
+                    <label class="check-item"><input type="radio" name="abn_gl_main" value="adeno" onclick="toggleGl()"> <span>Adenocarcinoma</span></label>
+                    <div id="gl_adeno_opts" style="margin-left: 28px; padding-left: 10px; border-left: 2px solid #ccc; display: flex; flex-direction: column; gap: 5px;">
+                        <label class="check-item"><input type="radio" name="abn_gl_adeno" value="endo" disabled> <span>Endocervical</span></label>
+                        <label class="check-item"><input type="radio" name="abn_gl_adeno" value="em" disabled> <span>Endometrial</span></label>
+                        <label class="check-item"><input type="radio" name="abn_gl_adeno" value="extra" disabled> <span>Extrauterine</span></label>
+                        <label class="check-item"><input type="radio" name="abn_gl_adeno" value="nos" disabled> <span>Not otherwise specified (NOS)</span></label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="category-box" style="margin-bottom: 0;">
+                <div class="category-title" style="color: #c82333;">c) Other malignant neoplasm:</div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <input type="text" id="other_malignant" placeholder="Please specify if applicable..." oninput="formatUppercase(this)">
+                </div>
+            </div>
+        </div>
+
+        <div style="margin-top: 30px; overflow: auto;">
+            <div class="nav-normal">
+                <button type="button" class="btn btn-secondary" onclick="switchStep(3, 2)">⬅️ Back</button>
+                <button type="button" class="btn" style="float: right;" onclick="switchStep(3, 4)">Next Step: Suggestions ➔</button>
+            </div>
+            <div class="nav-review hidden"><button type="button" class="btn btn-return" onclick="returnToSummary(3)">💾 Save & Return to Summary ➔</button></div>
+        </div>
+    </div>
+
+    <!-- ==================== STEP 4 ==================== -->
+    <div id="step4" class="wizard-step hidden">
+        <h2>Step 4: Suggestions & Comments <span class="step-indicator">4 / 5</span></h2>
+        
+        <div class="section-title">D) Comments (Optional)</div>
+        <div class="form-group"><textarea id="comments" rows="3" placeholder="Enter any additional comments..."></textarea></div>
+
+        <div class="section-title">E) Suggestion (Tick if applicable)</div>
+        <div class="category-box">
+            <div class="checkbox-grid">
+                <label class="check-item"><input type="checkbox" name="suggestion" value="routine"> <span>Repeat smear as scheduled</span></label>
+                <label class="check-item"><input type="checkbox" name="suggestion" value="repeat_1y"> <span>Repeat smear in 1 year</span></label>
+                <label class="check-item"><input type="checkbox" name="suggestion" value="repeat_3_6m"> <span>Repeat smear in 3-6 months</span></label>
+                <label class="check-item"><input type="checkbox" name="suggestion" value="colposcopy"> <span>Colposcopy and biopsy</span></label>
+                <label class="check-item"><input type="checkbox" name="suggestion" value="repeat_anti"> <span>Repeat smear after antimicrobial treatment</span></label>
+                <label class="check-item"><input type="checkbox" name="suggestion" value="hpvdna"> <span>HPV DNA</span></label>
+                <label class="check-item"><input type="checkbox" name="suggestion" value="repeat_oes"> <span>Repeat smear after oestrogen therapy</span></label>
+                <label class="check-item"><input type="checkbox" name="suggestion" value="refer_gynae"> <span>Refer to Gynaecologist / Gynaecological Oncologist</span></label>
+            </div>
+            <div class="form-group" style="margin-top: 15px; margin-bottom: 0;">
+                <input type="text" id="other_suggestion" placeholder="Other suggestions..." oninput="formatUppercase(this)">
+            </div>
+        </div>
+
+        <div style="margin-top: 30px; overflow: auto;">
+            <div class="nav-normal">
+                <button type="button" class="btn btn-secondary" onclick="switchStep(4, 3)">⬅️ Back</button>
+                <button type="button" class="btn" style="float: right; background-color: #17a2b8;" onclick="switchStep(4, 5)">Review Submission ➔</button>
+            </div>
+            <div class="nav-review hidden"><button type="button" class="btn btn-return" onclick="returnToSummary(4)">💾 Save & Return to Summary ➔</button></div>
+        </div>
+    </div>
+
+    <!-- ==================== STEP 5: REVIEW & VALIDATE ==================== -->
+    <div id="step5" class="wizard-step hidden">
+        <h2>Report Summary & Validation <span class="step-indicator">5 / 5</span></h2>
+        
+        <div id="review_alert" class="alert-banner hidden">
+            <i class="bi bi-info-circle-fill"></i> <b>Review Mode Active:</b> Pre-filled data loaded. Please review the summary below and validate.
+        </div>
+
+        <div id="summary_content" style="background: white; border: 1px solid #ccc; border-radius: 6px; padding: 10px; margin-bottom: 20px;">
+            <!-- 表格将通过 JS 动态生成 -->
+        </div>
+
+        <!-- LAB USE ONLY / Validation Section -->
+        <div class="section-title" style="border-left-color: #ff9800; display: block;">
+            LAB USE ONLY: Validation & Routing
+        </div>
+        <div class="category-box" style="background: #fff8e1; border-color: #ffe0b2;">
+            <div class="form-group">
+                <label>Current Logged-in Staff:</label>
+                <input type="text" id="screener_name" readonly style="background-color: #e9ecef; font-weight: bold; color: #007bff; border-color: #ccc;">
+            </div>
+
+            <label style="margin-top: 15px;">Next Action / Route to: <span style="color:red">*</span></label>
+            <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 8px;">
+                <label class="radio-card" style="margin-bottom:0; padding:12px;">
+                    <input type="radio" name="routing_action" value="route_2nd" style="transform: scale(1.2); margin-right: 8px;"> 
+                    <span style="font-weight: bold;">Route to 2nd Screener for Review</span>
+                </label>
+                <label class="radio-card" style="margin-bottom:0; padding:12px;">
+                    <input type="radio" name="routing_action" value="route_patho" style="transform: scale(1.2); margin-right: 8px;"> 
+                    <span style="font-weight: bold;">Route to Pathologist for Validation</span>
+                </label>
+                <label class="radio-card" style="margin-bottom:0; padding:12px; border-color: #4CAF50; background: #e8f5e9;">
+                    <input type="radio" name="routing_action" value="finalize" style="transform: scale(1.2); margin-right: 8px;"> 
+                    <span style="font-weight: bold; color: #28a745;">Validate & Finalize Report</span>
+                </label>
+            </div>
+        </div>
+
+        <div style="margin-top: 30px; overflow: auto;">
+            <div class="nav-normal">
+                <button type="button" class="btn btn-secondary" onclick="switchStep(5, 4)">⬅️ Back to Edit</button>
+            </div>
+            <button type="button" class="btn" style="float: right; background-color: #007bff; font-size: 1.1rem; padding: 12px 30px;" onclick="submitFinalReport()">✅ Confirm & Submit</button>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    // ==================== 全局状态与引擎初始化 ====================
+    var currentUser = "";
+    var isReviewMode = false;
+    var mockDatabase = { "800101145555": { name: "SITI AMINAH", race: "Malay" }, "750304141234": { name: "WONG MEI LING", race: "Chinese" } };
+
+    function getQueryParam(param) {
+        var search = window.location.search.substring(1);
+        var vars = search.split('&');
+        for (var i = 0; i < vars.length; i++) {
+            var pair = vars[i].split('=');
+            if (decodeURIComponent(pair[0]) == param) return decodeURIComponent(pair[1]);
+        }
+        return null;
+    }
+
+    function initPage() { 
+        currentUser = localStorage.getItem('lis_current_user') || "TEST USER [PATHOLOGIST]";
+        document.getElementById('screener_name').value = currentUser; 
+
+        var action = getQueryParam('action');
+        
+        if (action === 'review') {
+            isReviewMode = true;
+            document.getElementById('review_alert').classList.remove('hidden');
+            
+            var normals = document.querySelectorAll('.nav-normal');
+            var reviews = document.querySelectorAll('.nav-review');
+            for(var i=0; i<normals.length; i++) normals[i].classList.add('hidden');
+            for(var j=0; j<reviews.length; j++) reviews[j].classList.remove('hidden');
+
+            var pendingCase = JSON.parse(localStorage.getItem('lis_pending_case'));
+            if (pendingCase) {
+                autoFillForReview(pendingCase);
+                generateSummary();
+                document.getElementById('step5').classList.remove('hidden');
+            } else {
+                alert("Error loading case data."); window.location.href = 'dashboard.html';
+            }
+        } else {
+            var today = new Date();
+            var yy = String(today.getFullYear()).slice(-2);
+            var mm = String(today.getMonth() + 1); if (mm.length < 2) mm = '0' + mm;
+            var dd = String(today.getDate()); if (dd.length < 2) dd = '0' + dd;
+            document.getElementById('request_no').value = yy + mm + dd + "0001";
+            document.getElementById('step1').classList.remove('hidden');
+        }
+    }
+
+    function autoFillForReview(data) {
+        document.getElementById('ic_no').value = data.ic_no;
+        document.getElementById('cyto_no').value = data.cyto_no;
+        document.getElementById('patient_name').value = data.name;
+        
+        // 【修复 1】：彻底解锁修改权限，方便 Review 时变更 Demographic 资料
+        document.getElementById('patient_name').disabled = false;
+        document.getElementById('gender').disabled = false;
+        document.getElementById('race').disabled = false;
+        document.getElementById('dob').disabled = false;
+        
+        document.getElementById('location').value = "GYNAECOLOGY CLINIC";
+        document.getElementById('collected_date').value = "2026-10-25";
+        document.getElementById('received_date').value = "2026-10-26";
+        document.querySelector('input[name="sample_type"][value="lbc"]').checked = true;
+        toggleLBC(true);
+        document.querySelector('input[name="lbc_type"][value="ThinPrep"]').checked = true;
+
+        selectAdequacy('satisfactory');
+        document.querySelector('input[name="endo_cells"][value="present"]').checked = true;
+        toggleEndoCells('present');
+        
+        selectInterpretation('abnormal');
+        document.querySelector('input[name="abn_sq_main"][value="atypical"]').checked = true;
+        toggleSq();
+        document.querySelector('input[name="abn_sq_atypical"][value="ascus"]').checked = true;
+    }
+
+    function editStep(targetStep) {
+        document.getElementById('step5').classList.add('hidden');
+        document.getElementById('step' + targetStep).classList.remove('hidden');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function returnToSummary(currentStep) {
+        // 调用我们恢复的深层防呆拦截
+        if(!validateStep(currentStep)) return;
+        
+        document.getElementById('step' + currentStep).classList.add('hidden');
+        generateSummary(); 
+        document.getElementById('step5').classList.remove('hidden');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // ==================== 恢复的联动底层函数 ====================
+    function formatUppercase(element) { element.value = element.value.toUpperCase(); }
+    
+    function handleEnter(e) { if (e.keyCode === 13 || e.key === 'Enter') { e.preventDefault(); checkPatientHistory(); } }
+    
+    function checkPatientHistory() {
+        var icInput = document.getElementById('ic_no').value.trim();
+        var warning = document.getElementById('ic_warning');
+        if (!icInput) return;
+        var cleanIC = icInput.replace(/[^A-Z0-9]/g, '');
+        warning.style.display = (cleanIC.length !== 12) ? 'block' : 'none';
+        
+        var nameField = document.getElementById('patient_name');
+        var genderField = document.getElementById('gender');
+        var raceField = document.getElementById('race');
+        var dobField = document.getElementById('dob');
+
+        if (cleanIC.length === 12 && /^\d+$/.test(cleanIC)) {
+            var yy = parseInt(cleanIC.substring(0, 2), 10);
+            var mm = cleanIC.substring(2, 4);
+            var dd = cleanIC.substring(4, 6);
+            var currentYY = new Date().getFullYear() % 100;
+            var year = yy > currentYY ? 1900 + yy : 2000 + yy;
+            dobField.value = year + '-' + mm + '-' + dd;
+        }
+        
+        if (mockDatabase[cleanIC]) {
+            nameField.value = mockDatabase[cleanIC].name; 
+            raceField.value = mockDatabase[cleanIC].race; 
+            nameField.style.backgroundColor = "#e8f5e9"; 
+        } else {
+            nameField.value = ""; raceField.value = ""; 
+            if (!(cleanIC.length === 12 && /^\d+$/.test(cleanIC))) dobField.value = ""; 
+            nameField.style.backgroundColor = "#fff"; 
+            nameField.placeholder = "New Patient - Enter name";
+        }
+        nameField.disabled = false; genderField.disabled = false; raceField.disabled = false; dobField.disabled = false;
+    }
+
+    function toggleLBC(show) { 
+        var lbcDiv = document.getElementById('lbc_options');
+        show ? lbcDiv.classList.remove('hidden') : lbcDiv.classList.add('hidden');
+    }
+
+    function selectAdequacy(type) { 
+        var cSat = document.getElementById('card_satisfactory'), cUnsat = document.getElementById('card_unsatisfactory');
+        var pSat = document.getElementById('panel_satisfactory'), pUnsat = document.getElementById('panel_unsatisfactory');
+        
+        if (type === 'satisfactory') {
+            cSat.classList.add('active'); cSat.classList.remove('gray-out'); cUnsat.classList.remove('active'); cUnsat.classList.add('gray-out');
+            pSat.classList.remove('hidden'); pUnsat.classList.add('hidden');
+            var unsatChecks = document.querySelectorAll('input[name="unsat_reason"]');
+            for(var i=0; i<unsatChecks.length; i++) unsatChecks[i].checked = false;
+        } else {
+            cUnsat.classList.add('active'); cUnsat.classList.remove('gray-out'); cSat.classList.remove('active'); cSat.classList.add('gray-out');
+            pUnsat.classList.remove('hidden'); pSat.classList.add('hidden');
+            var endoChecks = document.querySelectorAll('input[name="endo_cells"]');
+            var withChecks = document.querySelectorAll('input[name="sat_with"]');
+            for(var j=0; j<endoChecks.length; j++) endoChecks[j].checked = false;
+            for(var k=0; k<withChecks.length; k++) withChecks[k].checked = false;
+            document.getElementById('sat_with_options').classList.add('hidden');
+        }
+        document.querySelector('input[name="adequacy"][value="' + type + '"]').checked = true;
+    }
+
+    function toggleEndoCells(val) { 
+        var withOpt = document.getElementById('sat_with_options');
+        if (val === 'present') { 
+            withOpt.classList.remove('hidden'); 
+        } else { 
+            withOpt.classList.add('hidden'); 
+            var withChecks = document.querySelectorAll('input[name="sat_with"]');
+            for(var i=0; i<withChecks.length; i++) withChecks[i].checked = false;
+        }
+    }
+
+    function selectInterpretation(type) {
+        var cardNilm = document.getElementById('card_nilm'), cardAbn = document.getElementById('card_abnormal');
+        var panelNilm = document.getElementById('panel_nilm'), panelAbn = document.getElementById('panel_abnormal');
+        
+        if (type === 'nilm') {
+            cardNilm.classList.add('active'); cardNilm.classList.remove('gray-out'); cardAbn.classList.remove('active'); cardAbn.classList.add('gray-out');
+            panelNilm.classList.remove('hidden'); panelAbn.classList.add('hidden');
+            clearSquamous(); clearGlandular(); document.getElementById('other_malignant').value = "";
+        } else if (type === 'abnormal') {
+            cardAbn.classList.add('active'); cardAbn.classList.remove('gray-out'); cardNilm.classList.remove('active'); cardNilm.classList.add('gray-out');
+            panelAbn.classList.remove('hidden'); panelNilm.classList.add('hidden');
+            var nilmChecks = document.querySelectorAll('#panel_nilm input[type="checkbox"]');
+            for(var i=0; i<nilmChecks.length; i++) nilmChecks[i].checked = false;
+        }
+        document.querySelector('input[name="interpretation"][value="' + type + '"]').checked = true;
+    }
+
+    function toggleSq() {
+        var atypicalOpts = document.querySelectorAll('input[name="abn_sq_atypical"]');
+        var hsilOpts = document.querySelectorAll('input[name="abn_sq_hsil_invasion"]');
+        for(var i=0; i<atypicalOpts.length; i++) { atypicalOpts[i].disabled = true; atypicalOpts[i].checked = false; }
+        for(var j=0; j<hsilOpts.length; j++) { hsilOpts[j].disabled = true; hsilOpts[j].checked = false; }
+        
+        var selected = document.querySelector('input[name="abn_sq_main"]:checked');
+        if (selected && selected.value === 'atypical') {
+            for(var a=0; a<atypicalOpts.length; a++) atypicalOpts[a].disabled = false;
+        } else if (selected && selected.value === 'hsil') {
+            for(var b=0; b<hsilOpts.length; b++) hsilOpts[b].disabled = false;
+        }
+    }
+    
+    function clearSquamous() { 
+        var mains = document.querySelectorAll('input[name="abn_sq_main"]');
+        for(var i = 0; i < mains.length; i++) mains[i].checked = false;
+        toggleSq(); 
+    }
+
+    function toggleGl() {
+        var nosOpts = document.querySelectorAll('input[name="abn_gl_nos"]');
+        var favourOpts = document.querySelectorAll('input[name="abn_gl_favour"]');
+        var adenoOpts = document.querySelectorAll('input[name="abn_gl_adeno"]');
+        for(var i=0; i<nosOpts.length; i++) { nosOpts[i].disabled = true; nosOpts[i].checked = false; }
+        for(var j=0; j<favourOpts.length; j++) { favourOpts[j].disabled = true; favourOpts[j].checked = false; }
+        for(var k=0; k<adenoOpts.length; k++) { adenoOpts[k].disabled = true; adenoOpts[k].checked = false; }
+
+        var selected = document.querySelector('input[name="abn_gl_main"]:checked');
+        if (selected && selected.value === 'atypical_nos') {
+            for(var a=0; a<nosOpts.length; a++) nosOpts[a].disabled = false;
+        } else if (selected && selected.value === 'atypical_favour') {
+            for(var b=0; b<favourOpts.length; b++) favourOpts[b].disabled = false;
+        } else if (selected && selected.value === 'adeno') {
+            for(var c=0; c<adenoOpts.length; c++) adenoOpts[c].disabled = false;
+        }
+    }
+
+    function clearGlandular() { 
+        var mains = document.querySelectorAll('input[name="abn_gl_main"]');
+        for(var i = 0; i < mains.length; i++) mains[i].checked = false;
+        toggleGl(); 
+    }
+
+    // 【修复 2】：深层防呆逻辑回归。不论是在新建单据的 "Next" 还是复审模式的 "Save & Return"，都会走这里。
+    function validateStep(step) {
+        if (step === 1) {
+            if(!document.getElementById('patient_name').value) { alert("⚠️ Please verify IC and enter Patient Name."); return false; }
+            if(!document.getElementById('location').value.trim()) { alert("⚠️ Please enter Location."); return false; }
+            if(!document.getElementById('collected_date').value) { alert("⚠️ Please enter Collected Date."); return false; }
+            if(!document.getElementById('received_date').value) { alert("⚠️ Please enter Received Date."); return false; }
+            var sampleType = document.querySelector('input[name="sample_type"]:checked');
+            if(!sampleType) { alert("⚠️ Please select Type of sample."); return false; }
+            if(sampleType.value === 'lbc' && !document.querySelector('input[name="lbc_type"]:checked')) { alert("⚠️ Please select Type of LBC."); return false; }
+        }
+        if (step === 2) {
+            var satEl = document.querySelector('input[name="adequacy"][value="satisfactory"]');
+            var unsatEl = document.querySelector('input[name="adequacy"][value="unsatisfactory"]');
+            if(!(satEl && satEl.checked) && !(unsatEl && unsatEl.checked)) { alert("⚠️ Please select Sample Adequacy."); return false; }
+            if (satEl && satEl.checked && !document.querySelector('input[name="endo_cells"]:checked')) { alert("⚠️ Please select Endocervical cells status."); return false; }
+            if (unsatEl && unsatEl.checked && document.querySelectorAll('input[name="unsat_reason"]:checked').length === 0) { alert("⚠️ Select at least one Unsatisfactory reason."); return false; }
+        }
+        if (step === 3) {
+            var nilmEl = document.querySelector('input[name="interpretation"][value="nilm"]');
+            var abnEl = document.querySelector('input[name="interpretation"][value="abnormal"]');
+            if(!(nilmEl && nilmEl.checked) && !(abnEl && abnEl.checked)) { alert("⚠️ Please select Interpretation / Result."); return false; }
+            
+            if (abnEl && abnEl.checked) {
+                var sqMain = document.querySelector('input[name="abn_sq_main"]:checked');
+                var glMain = document.querySelector('input[name="abn_gl_main"]:checked');
+                var otherMalignant = document.getElementById('other_malignant').value.trim();
+                
+                if (!sqMain && !glMain && otherMalignant === "") { alert("⚠️ For Abnormalities, select at least one condition or enter it in 'Other'."); return false; }
+                
+                // KKM 级深层拦截
+                if (sqMain && sqMain.value === 'atypical' && !document.querySelector('input[name="abn_sq_atypical"]:checked')) { 
+                    alert("⚠️ For Atypical squamous cells, specify ASC-US or ASC-H."); return false; 
+                }
+                if (glMain) {
+                    if (glMain.value === 'atypical_nos' && !document.querySelector('input[name="abn_gl_nos"]:checked')) { alert("⚠️ Specify the Atypical cells (NOS) type."); return false; }
+                    if (glMain.value === 'atypical_favour' && !document.querySelector('input[name="abn_gl_favour"]:checked')) { alert("⚠️ Specify the Atypical cells, favour neoplastic type."); return false; }
+                    if (glMain.value === 'adeno' && !document.querySelector('input[name="abn_gl_adeno"]:checked')) { alert("⚠️ Specify the Adenocarcinoma type."); return false; }
+                }
+            }
+        }
+        return true;
+    }
+
+    function switchStep(fromStep, toStep) {
+        if(!validateStep(fromStep)) return;
+        if (fromStep === 4 && toStep === 5) generateSummary();
+        document.getElementById('step' + fromStep).classList.add('hidden');
+        document.getElementById('step' + toStep).classList.remove('hidden');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // 【修复 3】：全景 Summary 生成引擎 (恢复了对所有 Checkbox 阵列的抓取)
+    function generateSummary() {
+        // ---- 抓取 Step 1 ----
+        var name = document.getElementById('patient_name').value || '-';
+        var ic = document.getElementById('ic_no').value || '-';
+        var gender = document.getElementById('gender').value || '-';
+        var race = document.getElementById('race').value || '-';
+        var dob = document.getElementById('dob').value || '-';
+        
+        var sampleTypeEl = document.querySelector('input[name="sample_type"]:checked');
+        var sampleTypeText = '-';
+        if (sampleTypeEl) {
+            if (sampleTypeEl.value === 'conventional') sampleTypeText = 'Conventional Pap Smear';
+            else if (sampleTypeEl.value === 'lbc') {
+                var lbcType = document.querySelector('input[name="lbc_type"]:checked');
+                sampleTypeText = 'Liquid-based preparation' + (lbcType ? ' (' + lbcType.value + ')' : '');
+            }
+        }
+
+        // ---- 抓取 Step 2 ----
+        var adqEl = document.querySelector('input[name="adequacy"]:checked');
+        var adequacyText = '-';
+        var adequacyDetails = [];
+        if (adqEl) {
+            if (adqEl.value === 'satisfactory') {
+                adequacyText = "Satisfactory for evaluation";
+                var endo = document.querySelector('input[name="endo_cells"]:checked');
+                if (endo) adequacyDetails.push("• Endocervical cells: " + (endo.value === 'present' ? 'Present' : 'Absent'));
+                var satWith = document.querySelectorAll('input[name="sat_with"]:checked');
+                if (satWith.length > 0) {
+                    var wArr = [];
+                    for(var i=0; i<satWith.length; i++) wArr.push(satWith[i].parentNode.innerText.trim());
+                    adequacyDetails.push("• With: " + wArr.join(", "));
+                }
+            } else if (adqEl.value === 'unsatisfactory') {
+                adequacyText = "Unsatisfactory for evaluation";
+                var unsatR = document.querySelectorAll('input[name="unsat_reason"]:checked');
+                if (unsatR.length > 0) {
+                    var rArr = [];
+                    for(var j=0; j<unsatR.length; j++) rArr.push(unsatR[j].parentNode.innerText.trim());
+                    adequacyDetails.push("• Reasons: " + rArr.join(", "));
+                }
+            }
+        }
+        var fullAdequacy = '<div style="font-weight:bold; color:' + (adqEl && adqEl.value==='unsatisfactory' ? '#dc3545' : '#28a745') + ';">' + adequacyText + '</div>';
+        if (adequacyDetails.length > 0) fullAdequacy += '<div style="font-size:0.85rem; color:#555; margin-top:5px; padding-left:5px; border-left:2px solid #ccc;">' + adequacyDetails.join('<br>') + '</div>';
+
+        // ---- 抓取 Step 3 ----
+        var intEl = document.querySelector('input[name="interpretation"]:checked');
+        var interpText = '-';
+        var interpDetails = [];
+        if (intEl) {
+            if (intEl.value === 'nilm') {
+                interpText = "Negative for intraepithelial lesion malignancy (NILM)";
+                var orgs = document.querySelectorAll('input[name="nilm_org"]:checked');
+                if(orgs.length > 0) {
+                    var oArr = [];
+                    for(var k=0; k<orgs.length; k++) oArr.push(orgs[k].parentNode.innerText.trim());
+                    interpDetails.push("• Organisms: " + oArr.join(", "));
+                }
+                var ben = document.querySelectorAll('input[name="nilm_benign"]:checked');
+                if(ben.length > 0) {
+                    var bArr = [];
+                    for(var m=0; m<ben.length; m++) bArr.push(ben[m].parentNode.innerText.trim());
+                    interpDetails.push("• Benign changes: " + bArr.join(", "));
+                }
+            } else if (intEl.value === 'abnormal') {
+                interpText = "Epithelial cells abnormalities";
+                var sqMain = document.querySelector('input[name="abn_sq_main"]:checked');
+                if (sqMain) {
+                    var sqT = sqMain.parentNode.innerText.trim();
+                    if (sqMain.value === 'atypical') {
+                        var sqAty = document.querySelector('input[name="abn_sq_atypical"]:checked');
+                        if (sqAty) sqT += " ➔ " + sqAty.parentNode.innerText.trim();
+                    } else if (sqMain.value === 'hsil') {
+                        var sqHs = document.querySelector('input[name="abn_sq_hsil_invasion"]:checked');
+                        if (sqHs) sqT += " ➔ " + sqHs.parentNode.innerText.trim();
+                    }
+                    interpDetails.push("• Squamous cell: " + sqT);
+                }
+                var glMain = document.querySelector('input[name="abn_gl_main"]:checked');
+                if (glMain) {
+                    var glT = glMain.parentNode.innerText.trim();
+                    if (glMain.value === 'atypical_nos') {
+                        var glNos = document.querySelector('input[name="abn_gl_nos"]:checked');
+                        if (glNos) glT += " ➔ " + glNos.parentNode.innerText.trim();
+                    } else if (glMain.value === 'atypical_favour') {
+                        var glFav = document.querySelector('input[name="abn_gl_favour"]:checked');
+                        if (glFav) glT += " ➔ " + glFav.parentNode.innerText.trim();
+                    } else if (glMain.value === 'adeno') {
+                        var glAde = document.querySelector('input[name="abn_gl_adeno"]:checked');
+                        if (glAde) glT += " ➔ " + glAde.parentNode.innerText.trim();
+                    }
+                    interpDetails.push("• Glandular cells: " + glT);
+                }
+                var othMal = document.getElementById('other_malignant').value.trim();
+                if (othMal) interpDetails.push("• Other malignant neoplasm: " + othMal);
+            }
+        }
+        var fullInterp = '<div style="font-weight:bold; color:' + (intEl && intEl.value==='abnormal' ? '#dc3545' : '#28a745') + ';">' + interpText + '</div>';
+        if (interpDetails.length > 0) fullInterp += '<div style="font-size:0.85rem; color:#555; margin-top:5px; padding-left:5px; border-left:2px solid #ccc;">' + interpDetails.join('<br>') + '</div>';
+
+        // ---- 抓取 Step 4 ----
+        var comments = document.getElementById('comments').value.trim() || 'None';
+        var checkedSuggEls = document.querySelectorAll('input[name="suggestion"]:checked');
+        var checkedSuggestions = [];
+        for (var n = 0; n < checkedSuggEls.length; n++) checkedSuggestions.push("• " + checkedSuggEls[n].nextElementSibling.innerText.trim());
+        var otherSugg = document.getElementById('other_suggestion').value.trim();
+        if(otherSugg) checkedSuggestions.push("• Other: " + otherSugg);
+        var suggestionsText = checkedSuggestions.length > 0 ? checkedSuggestions.join('<br>') : 'None';
+
+        // ---- 拼装 HTML 表格 ----
+        var html = '<table class="summary-table">';
+        
+        var btnEdit1 = isReviewMode ? '<button class="btn-edit" style="float:right;" onclick="editStep(1)">✏️ Edit</button>' : '';
+        html += '<tr style="background:#f8f9fa;"><td colspan="2" style="color:#007bff; font-size:1.05rem;">1. Patient & Sample Profile ' + btnEdit1 + '</td></tr>';
+        html += '<tr><td>Patient Name & IC:</td><td><strong>' + name + '</strong> <br><span class="text-muted">' + ic + '</span></td></tr>';
+        html += '<tr><td>Demographics:</td><td>Gender: ' + gender + ' &nbsp;|&nbsp; Race: ' + race + ' &nbsp;|&nbsp; DOB: ' + dob + '</td></tr>';
+        html += '<tr><td>Sample Type:</td><td>' + sampleTypeText + '</td></tr>';
+        
+        var btnEdit2 = isReviewMode ? '<button class="btn-edit" style="float:right;" onclick="editStep(2)">✏️ Edit</button>' : '';
+        html += '<tr style="background:#f8f9fa;"><td colspan="2" style="color:#28a745; font-size:1.05rem; border-top:1px solid #ccc;">2. Sample Adequacy ' + btnEdit2 + '</td></tr>';
+        html += '<tr><td>Adequacy:</td><td>' + fullAdequacy + '</td></tr>';
+
+        var btnEdit3 = isReviewMode ? '<button class="btn-edit" style="float:right;" onclick="editStep(3)">✏️ Edit</button>' : '';
+        html += '<tr style="background:#f8f9fa;"><td colspan="2" style="color:#dc3545; font-size:1.05rem; border-top:1px solid #ccc;">3. Interpretation / Result ' + btnEdit3 + '</td></tr>';
+        html += '<tr><td>Result:</td><td>' + fullInterp + '</td></tr>';
+
+        var btnEdit4 = isReviewMode ? '<button class="btn-edit" style="float:right;" onclick="editStep(4)">✏️ Edit</button>' : '';
+        html += '<tr style="background:#f8f9fa;"><td colspan="2" style="color:#6c757d; font-size:1.05rem; border-top:1px solid #ccc;">4. Suggestions & Comments ' + btnEdit4 + '</td></tr>';
+        html += '<tr><td>Comments:</td><td>' + comments.replace(/\n/g, '<br>') + '</td></tr>';
+        html += '<tr><td>Suggestions:</td><td>' + suggestionsText + '</td></tr>';
+        
+        html += '</table>';
+        document.getElementById('summary_content').innerHTML = html;
+    }
+
+    function submitFinalReport() {
+        var routingEl = document.querySelector('input[name="routing_action"]:checked');
+        if (!routingEl) { alert("⚠️ LAB USE ONLY: Please select Next Action or Validate before submission."); return; }
+        
+        var routingVal = routingEl.value;
+        var patientName = document.getElementById('patient_name').value;
+
+        if (routingVal === 'route_2nd') {
+            alert("ℹ️ SUBMITTED. Routed to 2nd Screener queue.");
+        } else if (routingVal === 'route_patho') {
+            alert("ℹ️ SUBMITTED. Routed to Pathologist queue.");
+        } else if (routingVal === 'finalize') {
+            alert("✅ SUCCESS! Report for " + patientName + " has been Validated & Finalized.");
+        }
+        
+        window.location.href = 'dashboard.html';
+    }
+</script>
+
+</body>
+</html>
